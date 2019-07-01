@@ -8,11 +8,11 @@ Created on Wed Nov 14 21:51:42 2018
 #  --startShot 283000
 import numpy as np
 import matplotlib.pyplot as plt
-from IS2_calval.read_ATM_wfs import read_ATM_file
-from IS2_calval.fit_waveforms import fit_catalog
+from read_ATM_wfs import read_ATM_file
+from fit_waveforms import fit_catalog
 #from fit_waveforms import waveform
-from IS2_calval.make_rx_scat_catalog import make_rx_scat_catalog
-from IS2_calval.waveform import waveform
+from make_rx_scat_catalog import make_rx_scat_catalog
+from waveform import waveform
 from time import time
 import scipy.stats as sps
 import copy

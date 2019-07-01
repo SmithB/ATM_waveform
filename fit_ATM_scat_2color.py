@@ -8,14 +8,14 @@ Created on Wed Nov 14 21:51:42 2018
 #  --startShot 283000
 import numpy as np
 import matplotlib.pyplot as plt
-from IS2_calval.read_ATM_wfs import read_ATM_file
-from IS2_calval.fit_waveforms import listDict
+from read_ATM_wfs import read_ATM_file
+from fit_waveforms import listDict
 #from fit_waveforms import waveform
-from IS2_calval.make_rx_scat_catalog import make_rx_scat_catalog
-from IS2_calval.fit_waveforms import fit_catalog
+from make_rx_scat_catalog import make_rx_scat_catalog
+from fit_waveforms import fit_catalog
 
-from IS2_calval.fit_2color_waveforms import fit_catalogs
-from IS2_calval.waveform import waveform
+from fit_2color_waveforms import fit_catalogs
+from waveform import waveform
 from time import time
 import argparse
 import h5py
@@ -102,6 +102,7 @@ def main(args):
     delta_ts=np.arange(-1.5, 2, 0.5)
 
     D={}
+    last_keys={ch:{} for ch in channels}
     for shot0 in start_vals:
         outShot0=shot0-args.startShot
         these_shots=np.arange(shot0, np.minimum(shot0+blocksize, lastShot))
@@ -142,7 +143,19 @@ def main(args):
         D_out, catalog_buffers= fit_catalogs(wf_data, WF_library, sigmas, delta_ts, \
                                             t_tol=0.25, sigma_tol=0.25, return_data_est=args.waveforms, \
                                             return_catalogs=True,  catalogs=catalog_buffers, params=outDS)
-
+        ch_keys={}
+        new_keys={}
+        fig=plt.figure(); 
+        for ind, ch in enumerate(channels):
+            fig.add_sublot(2, 1, ind)
+            ch_keys[ch]={key for key in catalog_buffers[ch].keys() if len(key) > 1}
+            new_keys[ch]=[key for key in new_keys if key not in last_keys[ch]]
+            kxy=np.concatenate(ch_keys, axis=0)
+            kxy_new=np.concatenate(new_keys, axis=0)
+            plt.plot(np.log10(kxy[:,0]), kxy[:,1],'k.')
+            plt.plot(np.log10(kxy_new[:,0]), kxy[:,1], 'ro')
+        
+        
         delta_time=time()-tic
         N_out=D_out['both']['R'].size
 

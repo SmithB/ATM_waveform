@@ -8,9 +8,9 @@ import numpy as np
 #from numpy.linalg import inv
 import matplotlib.pyplot as plt
 #import bisect
-from IS2_calval.waveform import waveform
+from waveform import waveform
 from copy import deepcopy
-from IS2_calval.fit_waveforms import listDict, integer_shift, broadened_misfit, wf_misfit, golden_section_search
+from fit_waveforms import listDict, integer_shift, broadened_misfit, wf_misfit, golden_section_search
 DOPLOT=False
 
 
@@ -130,6 +130,8 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
     fit_param_list=[]
     sigma_last = None
     t_center={ch:WFs[ch].t.mean() for ch in channels}
+    last_keys={ch:{} for ch in channels}
+
     # loop over input waveforms
     for WF_count in range(N_shots):
         fit_params=deepcopy(WFp_empty)
@@ -219,7 +221,19 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                 for ch, WFi in WF.items():
                     R0, wf_est[ch]=wf_misfit(fit_params[ch]['delta_t'], fit_params[ch]['sigma'], WF[ch], catalogs[ch], Ms[ch], [this_key[0]], return_data_est=True)
                 fit_params[ch]['wf_est']=wf_est
-
+        ch_keys={}
+        new_keys={}
+        fig=plt.figure(); 
+        for ind, ch in enumerate(channels):
+            fig.add_sublot(2, 1, ind)
+            ch_keys[ch]={key for key in catalogs[ch].keys() if len(key) > 1}
+            new_keys[ch]=[key for key in new_keys if key not in last_keys[ch]]
+            kxy=np.concatenate(ch_keys, axis=0)
+            kxy_new=np.concatenate(new_keys, axis=0)
+            plt.plot(np.log10(kxy[:,0]), kxy[:,1],'k.')
+            plt.plot(np.log10(kxy_new[:,0]), kxy[:,1], 'ro')
+            plt.plot(np.log10)
+ 
             # report
             fit_param_list += [fit_params]
             if DOPLOT:

@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 #import bisect
 import sys
-from IS2_calval.waveform import waveform
+from waveform import waveform
 from time import time
 DOPLOT=False
 
