@@ -10,7 +10,7 @@ import numpy as np
 #import matplotlib
 #matplotlib.use('nbagg')
 import matplotlib.pyplot as plt
-from waveform import waveform
+from ATM_waveform.waveform import waveform
 
 def read_wf(D, shot, starting_sample=0, read_tx=False, read_rx=False, read_all=False):
     """

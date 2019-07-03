@@ -8,11 +8,11 @@ import numpy as np
 #from numpy.linalg import inv
 import matplotlib.pyplot as plt
 #import bisect
-from waveform import waveform
+from ATM_waveform.waveform import waveform
 from copy import deepcopy
-from fit_waveforms import listDict, integer_shift, broadened_misfit, wf_misfit, golden_section_search
+from ATM_waveform.fit_waveforms import listDict, integer_shift, broadened_misfit, wf_misfit, golden_section_search
 DOPLOT=False
-
+KEY_SEARCH_PLOT=True
 
 def fit_broadened(delta_ts, sigmas,  WFs, catalogs,  Ms, key_top, sigma_tol=0.125, sigma_max=5., t_tol=None, sigma_last=None):
     """
@@ -130,7 +130,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
     fit_param_list=[]
     sigma_last = None
     t_center={ch:WFs[ch].t.mean() for ch in channels}
-    last_keys={ch:{} for ch in channels}
+    last_keys={ch:[] for ch in channels}
 
     # loop over input waveforms
     for WF_count in range(N_shots):
@@ -158,7 +158,12 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                 fB=lambda ind:fit_broadened(delta_ts, None, WF, catalogs, Ms, [k_vals[ind]], sigma_tol=sigma_tol, t_tol=t_tol, sigma_last=sigma_last)
                 W_broad_ind=0
                 for ch in channels:
-                    W_broad_ind=np.maximum(W_broad_ind, np.where(W_catalogs[ch] >= WF[ch].fwhm()[0])[0][0])
+                    this_broad_ind=np.where(W_catalogs[ch] >= WF[ch].fwhm()[0])[0]
+                    if len(this_broad_ind)==0:
+                        this_broad_ind=len(W_catalogs[ch])
+                    else:
+                        this_broad_ind=this_broad_ind[0]
+                    W_broad_ind=np.maximum(W_broad_ind, this_broad_ind)
 
                 key_search_ind=np.array(sorted(tuple(set([0, W_broad_ind-2,  W_broad_ind+2]))))
                 key_search_ind=key_search_ind[(key_search_ind>=0) & (key_search_ind<len(k_vals))]
@@ -221,19 +226,21 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                 for ch, WFi in WF.items():
                     R0, wf_est[ch]=wf_misfit(fit_params[ch]['delta_t'], fit_params[ch]['sigma'], WF[ch], catalogs[ch], Ms[ch], [this_key[0]], return_data_est=True)
                 fit_params[ch]['wf_est']=wf_est
-        ch_keys={}
-        new_keys={}
-        fig=plt.figure(); 
-        for ind, ch in enumerate(channels):
-            fig.add_sublot(2, 1, ind)
-            ch_keys[ch]={key for key in catalogs[ch].keys() if len(key) > 1}
-            new_keys[ch]=[key for key in new_keys if key not in last_keys[ch]]
-            kxy=np.concatenate(ch_keys, axis=0)
-            kxy_new=np.concatenate(new_keys, axis=0)
-            plt.plot(np.log10(kxy[:,0]), kxy[:,1],'k.')
-            plt.plot(np.log10(kxy_new[:,0]), kxy[:,1], 'ro')
-            plt.plot(np.log10)
- 
+            if KEY_SEARCH_PLOT:
+                ch_keys={}
+                new_keys={}
+                fig=plt.gcf();
+                fig.clf()
+                for ind, ch in enumerate(channels):
+                    fig.add_subplot(2, 1, ind+1)
+                    ch_keys[ch]=[[key[0:2]] for key in catalogs[ch].keys() if len(key) > 1]
+                    new_keys[ch]=[key for key in ch_keys[ch] if key not in last_keys[ch]]
+                    kxy=np.concatenate(ch_keys[ch], axis=0)
+                    plt.plot(np.log10(kxy[:,0]), kxy[:,1],'k.')
+                    if len(new_keys[ch]) > 0:
+                        kxy_new=np.concatenate(new_keys[ch], axis=0)
+                        plt.plot(np.log10(kxy_new[:,0]), kxy[:,1], 'ro')
+                last_keys={ch:ch_keys[ch].copy() for ch in ch_keys.keys()}
             # report
             fit_param_list += [fit_params]
             if DOPLOT:
