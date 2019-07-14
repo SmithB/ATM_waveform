@@ -10,9 +10,9 @@ import numpy as np
 import h5py
 from IS2_calval.waveform import waveform
 
-def make_rx_scat_catalog(TX, h5_file=None):
+def make_rx_scat_catalog(TX, h5_file=None, reduce_res=False):
     """
-    make a dictionary of waveform templates by convolving the transmit pulse with 
+    make a dictionary of waveform templates by convolving the transmit pulse with
     subsurface-scattering SRFs
     """
     if h5_file is None:
@@ -21,17 +21,21 @@ def make_rx_scat_catalog(TX, h5_file=None):
         t0=np.array(h5f['t'])*1.e9;
         z=np.zeros_like(t0)
         z[np.argmin(abs(t0))]=1;
-        TXc=np.convolve(TX.p.ravel(), z, 'full')    
+        TXc=np.convolve(TX.p.ravel(), z, 'full')
         TX.p[~np.isfinite(TX.p)]=0.
         t_full=np.arange(TXc.size)*0.25
         t_full -= waveform(t_full, TXc).nSigmaMean()[0]
         RX=dict()
+        r_vals = np.array(h5f['r_eff'])
+        if reduce_res:
+            r_vals=np.concatenate([r_vals[r_vals< 1e-4][::10], r_vals[(r_vals >= 1e-4) &  (r_vals < 5e-3)][::2], r_vals[r_vals >= 5e-3] ])
         for row, r_val in enumerate(h5f['r_eff']):
-            rx0=h5f['p'][row,:]            
+            if r_val not in r_vals:
+                continue
+            rx0=h5f['p'][row,:]
             temp=np.convolve(TX.p.ravel(), rx0, 'full')*0.25e-9
             RX[r_val]=waveform(TX.t, np.interp(TX.t.ravel(), t_full.ravel(), temp).reshape(TX.t.shape))
             RX[r_val].t0=0.
             RX[r_val].tc=RX[r_val].nSigmaMean()[0]
     return RX
-            
-            
+

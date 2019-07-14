@@ -12,7 +12,6 @@ from ATM_waveform.read_ATM_wfs import read_ATM_file
 from ATM_waveform.fit_waveforms import listDict
 #from fit_waveforms import waveform
 from ATM_waveform.make_rx_scat_catalog import make_rx_scat_catalog
-from ATM_waveform.fit_waveforms import fit_catalog
 
 from ATM_waveform.fit_2color_waveforms import fit_catalogs
 from ATM_waveform.waveform import waveform
@@ -24,22 +23,31 @@ import os
 np.seterr(invalid='ignore')
 os.environ["MKL_NUM_THREADS"]="1"  # multiple threads don't help that much
 
-def get_overlapping_shots(input_files):
+def choose_shots(input_files, skip=None):
     # get the overlapping shots from the input files
     times={}
     for key in input_files.keys():
         with h5py.File(input_files[key],'r') as h5f:
             times[key]=5.e-5*np.round(np.array(h5f['/waveforms/twv/shot/seconds_of_day'])/5.e-5)
-    times_both=np.intersect1d(*[times[key] for key in times.keys()])
-
+    if len(input_files) > 1:
+        times_both=np.intersect1d(*[times[key] for key in times.keys()])
+    else:
+        key=list(input_files.keys())[0]
+        times_both=times[key]
+    if skip is not None:
+        times_both=times_both[::skip]
     return {key:np.where(np.in1d(times[key], times_both))[0] for key in times.keys()}
 
-
 def main(args):
+    input_files={}
+    for ii, ch in enumerate(args.ch_names):
+        if ch != 'None':
+            input_files[ch]=args.input_files[ii]
     input_files={'IR':args.input_files[0],'G':args.input_files[1]}
     channels = list(input_files.keys())
+
     # get the waveform count from the output file
-    shots= get_overlapping_shots(input_files)
+    shots= choose_shots(input_files, args.reduce_by)
     nWFs=np.minimum(args.nShots, shots[channels[0]].size)
     lastShot=args.startShot+nWFs
 
@@ -69,13 +77,12 @@ def main(args):
 
     TX={}
     # get the transmit pulse
-    for file in args.TXfiles:
-        for ind, ch in enumerate(channels):
-            with h5py.File(args.TXfiles[ind],'r') as fh:
-                TX[ch]=waveform(np.array(fh['/TX/t']), np.array(fh['/TX/p']) )
-            TX[ch].t -= TX[ch].nSigmaMean()[0]
-            TX[ch].tc = 0
-            TX[ch].normalize()
+    for ind, ch in enumerate(channels):
+        with h5py.File(args.TXfiles[ind],'r') as fh:
+            TX[ch]=waveform(np.array(fh['/TX/t']), np.array(fh['/TX/p']) )
+        TX[ch].t -= TX[ch].nSigmaMean()[0]
+        TX[ch].tc = 0
+        TX[ch].normalize()
     # write the transmit pulse to the file
     for ch in channels:
         out_h5.create_dataset("TX/%s/t" % ch, data=TX[ch].t.ravel())
@@ -102,7 +109,7 @@ def main(args):
     delta_ts=np.arange(-1.5, 2, 0.5)
 
     D={}
-    for shot0 in start_vals:
+    for shot0 in start_vals[0:50]:
         outShot0=shot0-args.startShot
         these_shots=np.arange(shot0, np.minimum(shot0+blocksize, lastShot))
         tic=time()
@@ -113,7 +120,6 @@ def main(args):
             D=read_ATM_file(input_files[ch], shot0=ch_shots[0], nShots=ch_shots[-1]-ch_shots[0])
 
             # fit the transmit data for this channel and these pulses
-
             D['TX']=D['TX'][np.in1d(D['TX'].shots, ch_shots)]
             t_wf_ctr = np.nanmean(D['TX'].t)
             D['TX'].t0 += t_wf_ctr
@@ -142,7 +148,7 @@ def main(args):
         D_out, catalog_buffers= fit_catalogs(wf_data, WF_library, sigmas, delta_ts, \
                                             t_tol=0.25, sigma_tol=0.25, return_data_est=args.waveforms, \
                                             return_catalogs=True,  catalogs=catalog_buffers, params=outDS)
-               
+
         delta_time=time()-tic
         N_out=D_out['both']['R'].size
 
@@ -176,7 +182,9 @@ if __name__=="__main__":
     parser.add_argument('--DOPLOT', '-P', action='store_true')
     parser.add_argument('--skipRX', action='store_true', default=False)
     parser.add_argument('--everyNTX', type=int, default=100)
+    parser.add_argument('--reduce_by', '-r', type=int, default=1)
     parser.add_argument('--TXfiles', '-T', type=str, nargs=2, default=None)
     parser.add_argument('--waveforms', '-w', action='store_true', default=False)
+    parser.add_argument('--ch_names','-c', type=str, nargs=2, default=['IR','G'])
     args=parser.parse_args()
     main(args)

@@ -12,9 +12,9 @@ from ATM_waveform.waveform import waveform
 from copy import deepcopy
 from ATM_waveform.fit_waveforms import listDict, integer_shift, broadened_misfit, wf_misfit, golden_section_search
 DOPLOT=False
-KEY_SEARCH_PLOT=True
+KEY_SEARCH_PLOT=False
 
-def fit_broadened(delta_ts, sigmas,  WFs, catalogs,  Ms, key_top, sigma_tol=0.125, sigma_max=5., t_tol=None, sigma_last=None):
+def fit_broadened(delta_ts, sigmas,  WFs, catalogs,  Ms, key_top, sigma_tol=0.125, sigma_max=5., t_tol=None, refine_sigma=False, sigma_last=None):
     """
     Find the best broadening value that minimizes the misfit between a template and a waveform
     """
@@ -51,14 +51,16 @@ def fit_broadened(delta_ts, sigmas,  WFs, catalogs,  Ms, key_top, sigma_tol=0.12
         i1=len(sigmas)-1
     sigma_list=[sigmas[0], sigmas[i1]]
 
-    sigma_best, R_best = golden_section_search(fSigma, sigma_list, dSigma, bnds=[0, sigma_max], tol=sigma_tol, max_count=20)
+    sigma_best, R_best = golden_section_search(fSigma, sigma_list, dSigma, bnds=[0, sigma_max], tol=sigma_tol, max_count=20, refine_parabolic=refine_sigma)
+    if refine_sigma:
+        R_best=fSigma(sigma_best)
     this_key=key_top+[sigma_best]
     # assign the 'best' to each M
     for _, M in Ms.items():
         M[key_top]['best']={'key':this_key,'R':M[this_key]['best']['R']}
     return R_best
 
-def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, return_data_est=False, return_catalogs=False, catalogs=None, params=None):
+def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, return_data_est=False, return_catalogs=False, catalogs=None, params=None, M_list=None):
     """
     Search a library of waveforms for the best match between the broadened, shifted library waveform
     and the target waveforms
@@ -155,7 +157,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
         if True:
             if len(k_vals)>1:
                  # find the best misfit between this template and the waveform
-                fB=lambda ind:fit_broadened(delta_ts, None, WF, catalogs, Ms, [k_vals[ind]], sigma_tol=sigma_tol, t_tol=t_tol, sigma_last=sigma_last)
+                fB=lambda ind:fit_broadened(delta_ts, None, WF, catalogs, Ms, [k_vals[ind]], sigma_tol=sigma_tol, t_tol=t_tol, sigma_last=sigma_last, refine_sigma=True)
                 W_broad_ind=0
                 for ch in channels:
                     this_broad_ind=np.where(W_catalogs[ch] >= WF[ch].fwhm()[0])[0]
@@ -239,7 +241,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                     plt.plot(np.log10(kxy[:,0]), kxy[:,1],'k.')
                     if len(new_keys[ch]) > 0:
                         kxy_new=np.concatenate(new_keys[ch], axis=0)
-                        plt.plot(np.log10(kxy_new[:,0]), kxy[:,1], 'ro')
+                        plt.plot(np.log10(kxy_new[:,0]), kxy_new[:,1], 'ro')
                 last_keys={ch:ch_keys[ch].copy() for ch in ch_keys.keys()}
             # report
             fit_param_list += [fit_params]
@@ -254,6 +256,8 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                     this_title+='%s: K=%3.2g, dt=%3.2g, $\sigma$=%3.2g, R=%3.2f\n' % (ch, this_key[0], fit_params[ch]['delta_t'], fit_params[ch]['sigma'], fit_params[ch]['R'])
                 plt.title(this_title[0:-2])
                 print(WF_count)
+            if M_list is not None:
+                M_list += [Ms]
         #except KeyboardInterrupt:
         #    sys.exit()
         #except Exception as e:

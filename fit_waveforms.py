@@ -155,7 +155,7 @@ def gaussian(x, ctr, sigma):
     """
     return 1/(sigma*np.sqrt(2*np.pi))*np.exp(-(x-ctr)**2/2/sigma**2)
 
-def amp_misfit(x, y, els=None, A=None):
+def amp_misfit(x, y, els=None, A=None, x_squared=None):
     """
     misfit for the best-fitting scaled template model.
     """
@@ -164,8 +164,14 @@ def amp_misfit(x, y, els=None, A=None):
     else:
         ii=els
     if A is None:
-        A=np.sum(x[ii]*y[ii])/np.sum(x[ii]*x[ii])
-    r=y[ii]-x[ii]*A
+        xi=x[ii]
+        yi=y[ii]
+        if x_squared is not None:
+            A=np.dot(xi, yi)/np.sum(x_squared[ii])
+        else:
+            A=np.dot(xi, yi)/np.dot(xi, xi)
+    r=yi-xi*A
+    #r=y[ii]-x[ii]*A
     R=np.sqrt(np.sum((r**2)/(ii.sum()-2)))
     return R, A, ii
 
@@ -240,15 +246,16 @@ def wf_misfit(delta_t, sigma, WF, catalog, M, key_top,  G=None, return_data_est=
             M[this_key] = {'K0':key_top[0], 'R':R, 'A':np.float64(m[0]), 'B':np.float64(m[1]), 'delta_t':delta_t, 'sigma':sigma}
         else:
             # solve for the amplitude only
-
             G=catalog[this_key].p
             try:
-                ii=np.where(G>0.002)[0][0]
+                ii=np.where(G>0.002*np.nanmax(G))[0][0]
             except IndexError:
                 print("The G>002 problem happened!")
             good=np.isfinite(G) & np.isfinite(WF.p)
             good[0:np.maximum(0,ii-4)]=0
-            R, m, good = amp_misfit(G, WF.p, els=good)
+            if catalog[this_key].p_squared is None:
+                catalog[this_key].p_squared=catalog[this_key].p**2
+            R, m, good = amp_misfit(G, WF.p, els=good, x_squared=catalog[this_key].p_squared)
             M[this_key] = {'K0':key_top[0], 'R':R, 'A':m, 'B':0., 'delta_t':delta_t, 'sigma':sigma}
         if return_data_est:
             return R, G.dot(m)
@@ -267,12 +274,22 @@ def fit_shifted(delta_t_list, sigma, catalog, WF, M, key_top,  t_tol=None, refin
     delta_t_spacing=delta_t_list[1]-delta_t_list[0]
     bnds=[np.min(delta_t_list)-5, np.max(delta_t_list)+5]
     fDelta = lambda deltaTval: wf_misfit(deltaTval, sigma, WF, catalog, M,  key_top, G=G)
-    delta_t_best, R_best = golden_section_search(fDelta, delta_t_list, delta_t_spacing, bnds=bnds, tol=t_tol, max_count=100, refine_parabolic=refine_parabolic)
+    if key_top in M and 'best' in M[key_top]:
+        this_delta_t_list = delta_t_list[np.argsort(np.abs(delta_t_list-M[key_top]['best']['delta_t']))[0:2]]
+    else:
+        this_delta_t_list=delta_t_list
+    #K_last=list(M.keys())
+    delta_t_best, R_best = golden_section_search(fDelta, this_delta_t_list, delta_t_spacing, bnds=bnds, tol=t_tol, max_count=100, refine_parabolic=refine_parabolic)
+    #K_new=[kk for kk in M.keys() if (kk not in K_last)]
     this_key=key_top+[sigma]+[delta_t_best]
     if this_key not in M:
         R_best=fDelta(delta_t_best)
     #M[this_key]={'key':this_key, 'R':R_best, 'sigma':sigma, 'delta_t':delta_t_best}
-    M[key_top+[sigma]]['best']={'key':this_key, 'R':R_best, 'delta_t':delta_t_best}
+    M[key_top+[sigma]]['best'] = {'key':this_key, 'R':R_best, 'delta_t':delta_t_best}
+    if 'best' not in M[key_top]:
+        M[key_top]['best'] = {'key':this_key, 'R':R_best, 'delta_t':delta_t_best}
+    elif R_best < M[key_top]['best']['R']:
+        M[key_top]['best'] = {'key':this_key, 'R':R_best, 'delta_t':delta_t_best}
     return R_best
 
 def broadened_misfit(delta_ts, sigma, WF, catalog, M, key_top,  t_tol=None, refine_parabolic=True):

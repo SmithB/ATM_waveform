@@ -14,8 +14,8 @@ def gaussian(x, ctr, sigma):
     return 1/(sigma*np.sqrt(2*np.pi))*np.exp(-(x-ctr)**2/2/sigma**2)
 
 class waveform(object):
-    __slots__=['p','t','t0', 'dt', 'tc', 'size', 'nSamps', 'nPeaks','shots','params','noise_RMS']
-    def __init__(self, t, p, t0=0, tc=0, nPeaks=1, shots=np.NaN, noise_RMS=np.NaN):
+    __slots__=['p','t','t0', 'dt', 'tc', 'size', 'nSamps', 'nPeaks','shots','params','noise_RMS', 'p_squared']
+    def __init__(self, t, p, t0=0., tc=0., nPeaks=1, shots=np.NaN, noise_RMS=np.NaN, p_squared=None):
 
         self.t=t
         self.t.shape=[t.size,1]
@@ -27,6 +27,7 @@ class waveform(object):
         self.nSamps=self.p.shape[0]
         self.params=dict()
         self.noise_RMS=np.zeros(self.size)+np.NaN
+        self.p_squared=p_squared
 
         kw_dict={'t0':t0, 'tc':tc, 'nPeaks':nPeaks,'shots':shots, 'noise_RMS':noise_RMS}
         for key, val in kw_dict.items():
