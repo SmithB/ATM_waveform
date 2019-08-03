@@ -1,1 +1,11 @@
 __pycache__
+*.h5
+*~
+IR
+build/
+*.c
+*.so
+green
+make_t_misfit_plot.py
+
+
