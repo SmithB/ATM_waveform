@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 from ATM_waveform.waveform import waveform
 from copy import deepcopy
 from ATM_waveform.fit_waveforms import listDict, integer_shift, broadened_misfit, wf_misfit, golden_section_search
+
+
 DOPLOT=False
 KEY_SEARCH_PLOT=False
 
