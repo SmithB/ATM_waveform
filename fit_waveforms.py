@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import sys
 from ATM_waveform.waveform import waveform
 #import
-from ATM_waveform.corr_no_mean_cython import corr_no_mean_cython
+from ATM_waveform.corr_no_mean import corr_no_mean
 from time import time
 DOPLOT=False
 
@@ -276,7 +276,7 @@ def wf_misfit(delta_t, sigma, WF, catalog, M, key_top,  G=None, return_data_est=
             if this_entry.p_squared is None:
                 this_entry.p_squared=this_entry.p**2
             #R, m, good = amp_misfit(G, WF.p, els=good, x_squared=catalog[this_key].p_squared)
-            m, R = corr_no_mean_cython(G.ravel(), WF.p.ravel(), this_entry.p_squared.ravel(), good.astype(np.int32).ravel(), G.size)
+            m, R = corr_no_mean(G.ravel(), WF.p.ravel(), this_entry.p_squared.ravel(), good.astype(np.int32).ravel(), G.size)
             M[this_key] = {'K0':key_top[0], 'R':R, 'A':m, 'B':0., 'delta_t':delta_t, 'sigma':sigma}
         if return_data_est:
             return R, G.dot(m)
