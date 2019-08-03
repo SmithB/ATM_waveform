@@ -32,14 +32,14 @@ def fit_broadened(delta_ts, sigmas,  WFs, catalogs,  Ms, key_top, sigma_tol=0.12
         # the template by some unknown roughness.  Solving for that roughness for each
         # channel gives the maximum that might be needed for either (most conservative range)
         sigma0=0
-        for ch, catalog in catalogs.items():
-            sigma_template=catalog[key_top].fwhm()[0]/FWHM2sigma
+        for ch in channels:
+            sigma_template=catalogs[ch][key_top].fwhm()[0]/FWHM2sigma
             sigma_WF=WFs[ch].fwhm()[0]/FWHM2sigma
             #estimate broadening from template WF to measured WF
             sigma_extra=np.sqrt(np.maximum(0,  sigma_WF**2-sigma_template**2))
             sigma0=np.maximum(sigma0, sigma_step*np.ceil(sigma_extra/sigma_step))
         dSigma=np.maximum(sigma_step, np.ceil(sigma0/4.))
-        sigmas=np.array([0., np.maximum(sigma_step, sigma0-dSigma), np.maximum(sigma_step, sigma0+dSigma)])
+        sigmas=np.unique([0., np.maximum(sigma_step, sigma0-dSigma), sigma0, np.maximum(sigma_step, sigma0+dSigma)])
     else:
         dSigma=np.max(sigmas)/4.
     if np.any(~np.isfinite(sigmas)):
@@ -50,14 +50,15 @@ def fit_broadened(delta_ts, sigmas,  WFs, catalogs,  Ms, key_top, sigma_tol=0.12
     else:
         i1=len(sigmas)-1
     sigma_list=[sigmas[0], sigmas[i1]]
+    search_hist={}
+    sigma_best, R_best = golden_section_search(fSigma, sigma_list, dSigma, bnds=[0, sigma_max], tol=sigma_tol, max_count=20, refine_parabolic=refine_sigma, search_hist=search_hist)
 
-    sigma_best, R_best = golden_section_search(fSigma, sigma_list, dSigma, bnds=[0, sigma_max], tol=sigma_tol, max_count=20, refine_parabolic=refine_sigma)
     if refine_sigma:
         R_best=fSigma(sigma_best)
-    this_key=key_top+[sigma_best]
+    #this_key=key_top+[sigma_best]
     # assign the 'best' to each M
-    for _, M in Ms.items():
-        M[key_top]['best']={'key':this_key,'R':M[this_key]['best']['R']}
+    #for _, M in Ms.items():
+    #    M[key_top]['best']={'key':this_key,'R':M[this_key]['best']['R']}
     return R_best
 
 def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, return_data_est=False, return_catalogs=False, catalogs=None, params=None, M_list=None):
@@ -104,8 +105,9 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
     if params is None:
         params={'ch':['R','A','B','noise_RMS', 'delta_t', 'shot', 't0','tc'], 'both':['K0','R','sigma','Kmin','Kmax']}
     WFp_empty={}
-    for ch in channels+['both']:
-        WFp_empty[ch]={f:np.NaN for f in params[ch]}
+    for ch in channels:
+        WFp_empty[ch]={f:np.NaN for f in params['ch']}
+    WFp_empty['both']={f:np.NaN for f in params['both']}
     if return_data_est:
         for ch in channels:
             WFp_empty[ch]['wf_est']=np.zeros_like(WFs.t)+np.NaN
@@ -139,9 +141,9 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
         fit_params=deepcopy(WFp_empty)
         WF={ch:WFs[ch][WF_count] for ch in channels}
         # skip multi-peak returns:
-        n_peaks=np.array([WF[ch].nPeaks for ch in channels])
-        if np.any(n_peaks > 1):
-            continue
+        #n_peaks=np.array([WF[ch].nPeaks for ch in channels])
+        #if np.any(n_peaks > 1):
+        #    continue
         # shift the waveforms to put their tcs at the center of the time vector
         # doing this means that we have to store fewer shifted catalogs
         for ch in channels:
@@ -159,22 +161,24 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                  # find the best misfit between this template and the waveform
                 fB=lambda ind:fit_broadened(delta_ts, None, WF, catalogs, Ms, [k_vals[ind]], sigma_tol=sigma_tol, t_tol=t_tol, sigma_last=sigma_last, refine_sigma=True)
                 W_broad_ind=0
+                # find the first catalog entry that's broader than the waveform (check both cnannels, pick the broader one)
                 for ch in channels:
-                    this_broad_ind=np.where(W_catalogs[ch] >= WF[ch].fwhm()[0])[0]
+                    this_broad_ind=np.flatnonzero(W_catalogs[ch] >= WF[ch].fwhm()[0])
                     if len(this_broad_ind)==0:
                         this_broad_ind=len(W_catalogs[ch])
                     else:
                         this_broad_ind=this_broad_ind[0]
                     W_broad_ind=np.maximum(W_broad_ind, this_broad_ind)
-
-                key_search_ind=np.array(sorted(tuple(set([0, W_broad_ind-2,  W_broad_ind+2]))))
+                # search two steps on either side of the broadness-matched waveform, as well as zero (all broadening due to roughness)
+                key_search_ind=np.array(sorted(tuple(set([0, W_broad_ind-2, W_broad_ind+2]))))
                 key_search_ind=key_search_ind[(key_search_ind>=0) & (key_search_ind<len(k_vals))]
-
-                iBest, Rbest = golden_section_search(fB, key_search_ind, delta_x=2, bnds=[0, len(k_vals)-1], integer_steps=True, tol=1, refine_parabolic=False)
+                search_hist={}
+                iBest, Rbest = golden_section_search(fB, key_search_ind, delta_x=2, bnds=[0, len(k_vals)-1], integer_steps=True, tol=1, refine_parabolic=False, search_hist=search_hist)
                 iBest=int(iBest)
             else:
                 _=fit_broadened(delta_ts, None, WF, catalogs, Ms, [k_vals[0]], sigma_tol=sigma_tol, t_tol=t_tol, sigma_last=sigma_last)
                 iBest=0
+                Rbest=Ms[ch][[k_vals[0]]]['best']['R']
             this_kval=[k_vals[iBest]]
             fit_params['both']['R']=Rbest
             fit_params['both']['K0']=this_kval
@@ -198,6 +202,8 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                 fit_params[ch].update(M[this_key])
                 fit_params[ch]['noise_RMS']=WF[ch].noise_RMS[0]
                 fit_params[ch]['tc']=WF[ch].tc[0]
+                fit_params[ch]['Amax']=np.nanmax(WF[ch].p)
+                fit_params[ch]['seconds_of_day']=WF[ch].seconds_of_day
                 #fit_params[ch][WF_count]['delta_t'] -= WF[ch].t0
                 fit_params['both']['shot'] = WF[ch].shots[0]
                 sigma_last = np.maximum(sigma_last, M[this_key]['sigma'])
@@ -207,7 +213,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
 
             R_max=fit_params['both']['R']*(1.+1./np.sqrt(N_samps))
             if np.sum(searched_k_vals>0)>=3:
-                these=np.where(searched_k_vals>0)[0]
+                these=np.flatnonzero(searched_k_vals>0)
                 if len(these) > 3:
                      ind_k_vals=np.argsort(R[these])
                      these=these[ind_k_vals[0:4]]
@@ -220,7 +226,11 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                     fit_params['both']['Kmax']=10**np.max(E_roots)
             if (0. in searched_k_vals) and R[searched_k_vals==0]<R_max:
                 fit_params['both']['Kmin']=0.
-
+            #copy remaining waveform parameters to the output data structure
+            for ch in channels:
+                fit_params[ch]['shot']=WF[ch].shots[0]
+                fit_params[ch]['t0']=WF[ch].t0[0]
+                fit_params[ch]['noise_RMS']=WF[ch].noise_RMS[0]
             #print(this_key+[R[iR][0]])
             if return_data_est or DOPLOT:
                 # call WF_misfit for each channel
@@ -228,6 +238,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                 for ch, WFi in WF.items():
                     R0, wf_est[ch]=wf_misfit(fit_params[ch]['delta_t'], fit_params[ch]['sigma'], WF[ch], catalogs[ch], Ms[ch], [this_key[0]], return_data_est=True)
                 fit_params[ch]['wf_est']=wf_est
+
             if KEY_SEARCH_PLOT:
                 ch_keys={}
                 new_keys={}

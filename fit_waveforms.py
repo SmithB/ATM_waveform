@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 #import bisect
 import sys
 from ATM_waveform.waveform import waveform
+from ATM_waveform.corr_no_mean_cython import corr_no_mean_cython
 from time import time
 DOPLOT=False
 
@@ -48,7 +49,7 @@ def integer_shift(p, delta, fill_value=np.NaN):
         result[:] = p
     return result
 
-def golden_section_search(f, x0, delta_x, bnds=[-np.Inf, np.Inf], integer_steps=False, tol=0.01, max_count=100, refine_parabolic=False):
+def golden_section_search(f, x0, delta_x, bnds=[-np.Inf, np.Inf], integer_steps=False, tol=0.01, max_count=100, refine_parabolic=False, search_hist={}):
     """
     iterative search using the golden-section algorithm (more or less)
 
@@ -123,8 +124,13 @@ def golden_section_search(f, x0, delta_x, bnds=[-np.Inf, np.Inf], integer_steps=
         if it_count > max_count:
             print("WARNING: too many shifts")
             break
+    search_hist.update({'x':searched, 'R':R_vals})
     if refine_parabolic and (len(searched) >= 3):
-        return parabolic_search_refinement(searched, R_vals)
+        x_ref, R_ref = parabolic_search_refinement(searched, R_vals)
+        if (x_ref < bnds[0]) or (x_ref > bnds[1]):
+            return searched[iR], R_vals[iR]
+        else:
+            return x_ref, R_ref
     else:
         return searched[iR], R_vals[iR]
 
@@ -145,9 +151,9 @@ def parabolic_search_refinement(x, R):
     G=np.c_[np.ones((3,1)), (xs[p_ind]-xs[p_ind[1]]), (xs[p_ind]-xs[p_ind[1]])**2]
 
     m=np.linalg.solve(G, Rs[p_ind])
-    x_opt= -m[1]/2/m[2]
-    R_opt= m[0]  + m[1]*x_opt + m[2]*x_opt**2
-    return x_opt+xs[p_ind[1]], R_opt
+    x_optimum= -m[1]/2/m[2]
+    R_opt= m[0]  + m[1]*x_optimum + m[2]*x_optimum**2
+    return x_optimum + xs[p_ind[1]], R_opt
 
 def gaussian(x, ctr, sigma):
     """
@@ -167,7 +173,7 @@ def amp_misfit(x, y, els=None, A=None, x_squared=None):
         xi=x[ii]
         yi=y[ii]
         if x_squared is not None:
-            A=np.dot(xi, yi)/np.sum(x_squared[ii])
+            A = np.dot(xi, yi) / np.sum(x_squared[ii])
         else:
             A=np.dot(xi, yi)/np.dot(xi, xi)
     r=yi-xi*A
@@ -231,31 +237,45 @@ def wf_misfit(delta_t, sigma, WF, catalog, M, key_top,  G=None, return_data_est=
             catalog[broadened_key]=waveform(catalog[key_top].t, broadened_p, t0=catalog[key_top].t0, tc=catalog[key_top].tc)
         # check if the shifted version of the broadened waveform is in the catalog
         if this_key not in catalog:
+            # if not, make it.
             M[this_key]=listDict()
-            catalog[this_key] = waveform(catalog[broadened_key].t, \
-                   np.interp(WF.t.ravel(), (catalog[key_top].t-catalog[key_top].tc+delta_t).ravel(), broadened_p.ravel(), left=np.NaN, right=np.NaN), \
+            temp_p = np.interp(WF.t.ravel(), (catalog[key_top].t-catalog[key_top].tc+delta_t).ravel(), broadened_p.ravel(), left=np.NaN, right=np.NaN)
+            try:
+                # Note that argmax on a binary array returns the first nonzero index (faster than where)
+                ii=np.argmax(temp_p>0.01*np.nanmax(temp_p))
+                #ii=np.where(temp_p>0.002*np.nanmax(temp_p))[0][0]
+            except IndexError:
+                print("no ii")
+                ii=np.argmax(temp_p>0.01*np.nanmax(temp_p))
+                #ii=np.where(temp_p>0.002*np.nanmax(temp_p))[0]
+            mask=np.ones_like(temp_p, dtype=bool)
+            mask[0:ii-4] = False
+            catalog[this_key] = waveform(catalog[broadened_key].t, temp_p,
                    tc=catalog[broadened_key].tc, t0=catalog[broadened_key].t0)
-            catalog[this_key].params['Ginv']=None
-            catalog[this_key].params['good']=None
-        if fit_BG is True:
+            catalog[this_key].params['mask']=mask
+            #catalog[this_key].params['Ginv']=None
+            #catalog[this_key].params['good']=None
+        this_entry=catalog[this_key]
+        if fit_BG:
             # solve for the background and the amplitude
             R, m, Ginv, good = lin_fit_misfit(catalog[this_key].p, WF.p, G=G,\
-                Ginv=catalog[this_key].params['Ginv'], good_old=catalog[this_key].params['good'])
-            catalog[this_key].params['Ginv']=Ginv
-            catalog[this_key].params['good']=good
+                Ginv=this_entry.params['Ginv'], good_old=this_entry.params['good'])
+            #catalog[this_key].params['Ginv']=Ginv
+            this_entry.params['good']=good
             M[this_key] = {'K0':key_top[0], 'R':R, 'A':np.float64(m[0]), 'B':np.float64(m[1]), 'delta_t':delta_t, 'sigma':sigma}
         else:
             # solve for the amplitude only
-            G=catalog[this_key].p
-            try:
-                ii=np.where(G>0.002*np.nanmax(G))[0][0]
-            except IndexError:
-                print("The G>002 problem happened!")
-            good=np.isfinite(G) & np.isfinite(WF.p)
-            good[0:np.maximum(0,ii-4)]=0
-            if catalog[this_key].p_squared is None:
-                catalog[this_key].p_squared=catalog[this_key].p**2
-            R, m, good = amp_misfit(G, WF.p, els=good, x_squared=catalog[this_key].p_squared)
+            G=this_entry.p
+            #try:
+            #    ii=np.where(G>0.002*np.nanmax(G))[0][0]
+            #except IndexError:
+            #    print("The G>002 problem happened!")
+            good=np.isfinite(G).ravel() & np.isfinite(WF.p).ravel() & this_entry.params['mask']
+            #good[0:np.maximum(0,ii-4)]=0
+            if this_entry.p_squared is None:
+                this_entry.p_squared=this_entry.p**2
+            #R, m, good = amp_misfit(G, WF.p, els=good, x_squared=catalog[this_key].p_squared)
+            m, R = corr_no_mean_cython(G.ravel(), WF.p.ravel(), this_entry.p_squared.ravel(), good.astype(np.int32).ravel(), G.size)
             M[this_key] = {'K0':key_top[0], 'R':R, 'A':m, 'B':0., 'delta_t':delta_t, 'sigma':sigma}
         if return_data_est:
             return R, G.dot(m)
@@ -276,6 +296,7 @@ def fit_shifted(delta_t_list, sigma, catalog, WF, M, key_top,  t_tol=None, refin
     fDelta = lambda deltaTval: wf_misfit(deltaTval, sigma, WF, catalog, M,  key_top, G=G)
     if key_top in M and 'best' in M[key_top]:
         this_delta_t_list = delta_t_list[np.argsort(np.abs(delta_t_list-M[key_top]['best']['delta_t']))[0:2]]
+        this_delta_t_list = np.concatenate([this_delta_t_list, [this_delta_t_list.mean()]])
     else:
         this_delta_t_list=delta_t_list
     #K_last=list(M.keys())
@@ -310,7 +331,10 @@ def broadened_misfit(delta_ts, sigma, WF, catalog, M, key_top,  t_tol=None, refi
                 tK=np.arange(-nK, nK+1)*WF.dt
                 K=gaussian(tK, 0, sigma)
                 K=K/np.sum(K)
-                catalog[this_key]=waveform(catalog[key_top].t, np.convolve(catalog[key_top].p.ravel(), K,'same'))
+                try:
+                    catalog[this_key]=waveform(catalog[key_top].t, np.convolve(catalog[key_top].p.ravel(), K,'same'))
+                except ValueError:
+                    print("Convolution failed")
         return fit_shifted(delta_ts, sigma, catalog, WF,  M, key_top, t_tol=t_tol, refine_parabolic=refine_parabolic)
 
 def fit_broadened(delta_ts, sigmas, WF, catalog,  M, key_top, sigma_tol=None, sigma_max=5., t_tol=None, sigma_last=None):
@@ -421,7 +445,7 @@ def fit_catalog(WFs, catalog_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, r
             if len(keys)>1:
                  # Search over input keys to find the best misfit between this template and the waveform
                 fB=lambda ind: fit_broadened(delta_ts, None,  WF, catalog, M, [keys[ind]], sigma_tol=sigma_tol, t_tol=t_tol, sigma_last=sigma_last)
-                W_match_ind=np.where(W_catalog >= WF.fwhm()[0])[0]
+                W_match_ind=np.flatnonzero(W_catalog >= WF.fwhm()[0])
                 if len(W_match_ind) >0:
                     ind=np.array(tuple(set([0, W_match_ind[0]-2,  W_match_ind[0]+2])))
                     ind=ind[(ind >= 0) & (ind<len(keys))]
@@ -449,7 +473,7 @@ def fit_catalog(WFs, catalog_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, r
             sigma_last=M[this_key]['sigma']
             R_max=fit_params[WF_count]['R']*(1.+1./np.sqrt(WF.t.size))
             if np.sum(searched_keys>0)>=3:
-                these=np.where(searched_keys>0)[0]
+                these=np.flatnonzero(searched_keys>0)
                 if len(these) > 3:
                      ind_keys=np.argsort(R[these])
                      these=these[ind_keys[0:4]]

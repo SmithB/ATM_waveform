@@ -8,7 +8,7 @@ Created on Sun Nov 25 14:01:44 2018
 
 import numpy as np
 import h5py
-from IS2_calval.waveform import waveform
+from ATM_waveform.waveform import waveform
 
 def make_rx_scat_catalog(TX, h5_file=None, reduce_res=False):
     """

@@ -59,15 +59,16 @@ def read_ATM_file(fname, getCountAndReturn=False, shot0=0, nShots=np.Inf, readTX
                     '/waveforms/twv/gate/pulse/count'):
             D_in[key]=np.array(h5f[key], dtype=int)
         # read in the gate info for the shots we want to read
-        for key in( '/waveforms/twv/shot/gate_start', '/waveforms/twv/shot/gate_count', '/laser/gate_xmt', '/laser/gate_rcv', '/laser/calrng'):
+        for key in( '/waveforms/twv/shot/gate_start', '/waveforms/twv/shot/gate_count',  '/laser/gate_xmt', '/laser/gate_rcv', '/laser/calrng'):
             D_in[key]=np.array(h5f[key][shot0:shotN], dtype=int)
 
-        #read in the geolocation
+        #read in the geolocation and time
         try:
-            for key in ('footprint/latitude','footprint/longitude','footprint/elevation','/laser/scan_azimuth'):
+            for key in ('/footprint/latitude','/footprint/longitude','/footprint/elevation','/laser/scan_azimuth'):
                 D_in[key]=np.array(h5f[key][shot0:shotN])
         except KeyError:
             pass
+        D_in['/waveforms/twv/shot/seconds_of_day']=np.array(h5f['/waveforms/twv/shot/seconds_of_day'][shot0:shotN])
         # read the sampling interval
         dt=np.float64(h5f['/waveforms/twv/ancillary_data/sample_interval'])
 
@@ -80,7 +81,6 @@ def read_ATM_file(fname, getCountAndReturn=False, shot0=0, nShots=np.Inf, readTX
         # subsequent indexes into the amplitude array
         key='/waveforms/twv/wvfm/amplitude'
         D_in[key]=np.array(h5f[key][sample_start:sample_end+1], dtype=int)
-
 
         TX=list()
         RX=list()
@@ -103,20 +103,22 @@ def read_ATM_file(fname, getCountAndReturn=False, shot0=0, nShots=np.Inf, readTX
                 rx_samp0.append(wfd['rx']['pos'])
         shots=np.arange(shot0, shotN, dtype=int)
         try:
-            result={ 'az':D_in['/laser/scan_azimuth'],'dt':dt, 'elevation':D_in['footprint/elevation'], 'latitude':D_in['footprint/latitude'],'longitude':D_in['footprint/longitude']}
+            result={ 'az':D_in['/laser/scan_azimuth'],'dt':dt, 'elevation':D_in['/footprint/elevation'],
+                    'latitude':D_in['/footprint/latitude'],'longitude':D_in['/footprint/longitude']}
         except KeyError:
             result={}
         result['calrng']=D_in['/laser/calrng']
-
+        result['seconds_of_day']=D_in['/waveforms/twv/shot/seconds_of_day']
         if readTX:
             TX=np.c_[TX].transpose()
-            result['TX']=waveform(np.arange(TX.shape[0])*dt, TX, shots=shots, t0=tx_samp0*dt)
+            result['TX']=waveform(np.arange(TX.shape[0])*dt, TX, shots=shots, t0=tx_samp0*dt, seconds_of_day=D_in['/waveforms/twv/shot/seconds_of_day'])
 
         if readRX:
             RX=np.c_[RX].transpose()
             nPeaks=np.c_[nPeaks].ravel()
-            result['RX']=waveform(np.arange(RX.shape[0])*dt, RX, shots=shots, nPeaks=nPeaks, t0=rx_samp0*dt)
+            result['RX']=waveform(np.arange(RX.shape[0])*dt, RX, shots=shots, nPeaks=nPeaks, t0=rx_samp0*dt, seconds_of_day=D_in['/waveforms/twv/shot/seconds_of_day'])
             result['rx_samp0']=rx_samp0
+        result['shots']=shots
     return result
 
 def normalize_wf(wf, noise_samps=[0, 30]):

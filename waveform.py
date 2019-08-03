@@ -14,9 +14,26 @@ def gaussian(x, ctr, sigma):
     return 1/(sigma*np.sqrt(2*np.pi))*np.exp(-(x-ctr)**2/2/sigma**2)
 
 class waveform(object):
-    __slots__=['p','t','t0', 'dt', 'tc', 'size', 'nSamps', 'nPeaks','shots','params','noise_RMS', 'p_squared']
-    def __init__(self, t, p, t0=0., tc=0., nPeaks=1, shots=np.NaN, noise_RMS=np.NaN, p_squared=None):
+    __slots__=['p','t','t0', 'dt', 'tc', 'size', 'nSamps', 'nPeaks','shots','params','noise_RMS', 'p_squared','FWHM','seconds_of_day']
+    """
+        Waveform class contains tools to work data that give power as a function of time
 
+        Attributes include:
+            size: Number of traces in the waveform object
+            nSamps: number of samples per waveform
+            p: power (nSamps, size) or (nSamps,)
+            t: relative time (nSamps,)
+            t0: Offset time added to t (size)
+            dt: time spacing of t
+            tc: center time of the trace
+            nPeaks: number of peaks in each trace
+            shots: shot number of each trace
+            noise_RMS: background noise estimate for each trace
+            p_squared: the square of the p values
+            FWHM: full width at half maximum of each trace
+            seconds_of_day: time of day for each trace
+    """
+    def __init__(self, t, p, t0=0., tc=0., nPeaks=1, shots=None, noise_RMS=None, p_squared=None, FWHM=None, seconds_of_day=None):
         self.t=t
         self.t.shape=[t.size,1]
         self.dt=t[1]-t[0]
@@ -26,18 +43,42 @@ class waveform(object):
         self.size=self.p.shape[1]
         self.nSamps=self.p.shape[0]
         self.params=dict()
-        self.noise_RMS=np.zeros(self.size)+np.NaN
         self.p_squared=p_squared
-
-        kw_dict={'t0':t0, 'tc':tc, 'nPeaks':nPeaks,'shots':shots, 'noise_RMS':noise_RMS}
+        # turn keyword arguments into 1-d arrays of size (self.size,)
+        kw_dict={'t0':t0, 'tc':tc, 'nPeaks':nPeaks,'shots':shots, 'noise_RMS':noise_RMS, 'seconds_of_day':seconds_of_day, 'FWHM': FWHM}
         for key, val in kw_dict.items():
-            if ~hasattr(val,'__len__') or val.size < self.size:
+            if val is None:
+                setattr(self, key, None)
+                continue
+            if hasattr(val, '__len__'):
+                this_N = val.size
+            else:
+                this_N = 1
+            if this_N < self.size:
                 setattr(self, key, np.zeros(self.size, dtype=np.array(val).dtype)+val)
             else:
-                setattr(self, key, val)
+                if isinstance(val, np.ndarray):
+                    if val.shape==(self.size,):
+                        setattr(self, key, val)
+                    elif val.ndim==0:
+                        setattr(self, key, np.array([val]))
+                    else:
+                        setattr(self, key, np.array(val))
+                else:
+                    setattr(self, key, np.array([val]))
 
     def __getitem__(self, key):
-        return waveform(self.t, self.p[:,key], t0=self.t0[key], tc=self.tc[key], nPeaks=self.nPeaks[key],shots=self.shots[key], noise_RMS=self.noise_RMS[key])
+        result=waveform(self.t, self.p[:,key])
+        for field in ['t0','tc','nPeaks', 'shots','noise_RMS','seconds_of_day','FWHM']:
+            temp=getattr(self, field)
+            if temp is not None:
+                if isinstance(key, np.ndarray):
+                    setattr(result, field, temp[key])
+                else:
+                    setattr(result, field, temp[[key]])
+        return result
+        #return waveform(self.t, self.p[:,key], t0=self.t0[key], tc=self.tc[key], nPeaks=self.nPeaks[key], shots=self.shots[key],
+        #                noise_RMS=self.noise_RMS[key], FWHM=fwhm, seconds_of_day=self.seconds_of_day[key])
 
     def centroid(self, els=None, threshold=None):
         """
@@ -172,6 +213,8 @@ class waveform(object):
         """
         Calculate the full width at half max of a distribution
         """
+        if self.FWHM is not None:
+            return self.FWHM
         FWHM=np.zeros(self.size)
         for col in np.arange(self.size):
             p=self.p[:,col]
@@ -186,6 +229,7 @@ class waveform(object):
             i50=ii[-1]+1
             dp=(p50 - p[i50-1]) / (p[i50] - p[i50-1])
             FWHM[col] = self.t[i50-1] + dp*self.dt - temp
+        self.FWHM=FWHM
         return FWHM
 
     def calcMean(self, threshold=255):

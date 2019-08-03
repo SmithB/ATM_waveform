@@ -5,7 +5,9 @@ Created on Wed Nov 14 21:51:42 2018
 
 @author: ben
 """
-#  --startShot 283000
+#  2 ./IR/ILNIRW1Bprelim_20181028_013800.atm6CT7.filt.h5 ./green/ILNSAW1Bprelim_20181028_013800.atm6DT7.filt.h5 20181028_013800_out.h5 -f SRF_IR_full.h5 SRF_green_full.h5 -T TX_IR.h5 TX_green.h5 -c IR G
+#  1 ./green/ILNSAW1Bprelim_20181028_013800.atm6DT7.filt.h5 20181028_013800_G_out.h5 -f SRF_green_full.h5 -T  TX_green.h5 -c G
+
 import numpy as np
 import matplotlib.pyplot as plt
 from ATM_waveform.read_ATM_wfs import read_ATM_file
@@ -19,12 +21,16 @@ from time import time
 import argparse
 import h5py
 import os
+import sys
 
 np.seterr(invalid='ignore')
 os.environ["MKL_NUM_THREADS"]="1"  # multiple threads don't help that much
 
 def choose_shots(input_files, skip=None):
     # get the overlapping shots from the input files
+    #
+    # matches the shots from input files by their "seconds_of_day_field,' using a default
+    # resolution of 5e-5 s
     times={}
     for key in input_files.keys():
         with h5py.File(input_files[key],'r') as h5f:
@@ -36,34 +42,40 @@ def choose_shots(input_files, skip=None):
         times_both=times[key]
     if skip is not None:
         times_both=times_both[::skip]
-    return {key:np.where(np.in1d(times[key], times_both))[0] for key in times.keys()}
+    return {key:np.flatnonzero(np.in1d(times[key], times_both)) for key in times.keys()}
 
 def main(args):
+    # main method : open the input files, create output files, process waveforms
+
     input_files={}
     for ii, ch in enumerate(args.ch_names):
         if ch != 'None':
             input_files[ch]=args.input_files[ii]
-    input_files={'IR':args.input_files[0],'G':args.input_files[1]}
     channels = list(input_files.keys())
 
     # get the waveform count from the output file
     shots= choose_shots(input_files, args.reduce_by)
     nWFs=np.minimum(args.nShots, shots[channels[0]].size)
-    lastShot=args.startShot+nWFs
+    lastShot=np.minimum(args.startShot+args.nShots, len(shots[channels[0]]))
+    nWFs = lastShot-args.startShot+1
 
     # make the output file
     if os.path.isfile(args.output_file):
         os.remove(args.output_file)
+    # define the output datasets
     outDS={}
-    for ch in channels:
-        outDS[ch]=['R', 'A', 'B', 'delta_t', 't0','tc', 'noise_RMS','shot']
+    outDS['ch']=['R', 'A', 'B', 'delta_t', 't0','tc', 'noise_RMS','shot','Amax','seconds_of_day']
     outDS['both']=['R', 'K0', 'Kmin', 'Kmax', 'sigma']
     outDS['location']=['latitude', 'longitude', 'elevation']
     out_h5 = h5py.File(args.output_file,'w')
-    for grp in outDS:
+    for grp in ['both','location']:
         out_h5.create_group('/'+grp)
         for DS in outDS[grp]:
             out_h5.create_dataset('/'+grp+'/'+DS, (nWFs,), dtype='f8')
+    for ch in channels:
+        out_h5.create_group('/'+ch)
+        for DS in outDS['ch']:
+            out_h5.create_dataset('/'+ch+'/'+DS, (nWFs,), dtype='f8')
 
     # make groups in the file for transmit data
     for ch in channels:
@@ -85,52 +97,70 @@ def main(args):
         TX[ch].normalize()
     # write the transmit pulse to the file
     for ch in channels:
-        out_h5.create_dataset("TX/%s/t" % ch, data=TX[ch].t.ravel())
-        out_h5.create_dataset("TX/%s/p" % ch, data=TX[ch].p.ravel())
+        out_h5.create_dataset("/TX/%s/t" % ch, data=TX[ch].t.ravel())
+        out_h5.create_dataset("/TX/%s/p" % ch, data=TX[ch].p.ravel())
 
-    # make the library of templates
+    # initialize the library of templates for the transmit waveforms
+    TX_library={}
+    for ind, ch in enumerate(channels):
+        TX_library[ch] = listDict()
+        TX_library[ch].update({0.:TX[ch]})
+
+    # initialize the library of templates for the received waveforms
     WF_library=dict()
     for ind, ch in enumerate(channels):
         WF_library[ch] = dict()
         WF_library[ch].update({0.:TX[ch]})
         WF_library[ch].update(make_rx_scat_catalog(TX[ch], h5_file=args.scat_files[ind]))
 
+
     print("Returns:")
     # loop over start vals (one block at a time...)
     # choose how to divide the output
-    blocksize=10
+    blocksize=1000
     start_vals=args.startShot+np.arange(0, nWFs, blocksize, dtype=int)
 
     catalog_buffers={ch:listDict() for ch in channels}
+    TX_catalog_buffers={ch:listDict() for ch in channels}
     time_old=time()
 
     sigmas=np.arange(0, 5, 0.25)
     # choose a set of delta t values
-    delta_ts=np.arange(-1.5, 2, 0.5)
+    delta_ts=np.arange(-1., 1.5, 0.5)
 
     D={}
-    for shot0 in start_vals[0:50]:
+    for shot0 in start_vals:
         outShot0=shot0-args.startShot
-        these_shots=np.arange(shot0, np.minimum(shot0+blocksize, lastShot))
-        tic=time()
+        these_shots=np.arange(shot0, np.minimum(shot0+blocksize, lastShot), dtype=int)
+        if len(these_shots) < 1:
+            continue
+        #tic=time()
         wf_data={}
         for ch in channels:
-            ch_shots=shots[ch][np.in1d( shots[ch], these_shots)]
+            ch_shots=shots[ch][these_shots]
             # make the return waveform structure
-            D=read_ATM_file(input_files[ch], shot0=ch_shots[0], nShots=ch_shots[-1]-ch_shots[0])
+            D=read_ATM_file(input_files[ch], shot0=ch_shots[0], nShots=ch_shots[-1]-ch_shots[0]+1)
 
             # fit the transmit data for this channel and these pulses
             D['TX']=D['TX'][np.in1d(D['TX'].shots, ch_shots)]
+            # set t0 to the center of the waveform
             t_wf_ctr = np.nanmean(D['TX'].t)
             D['TX'].t0 += t_wf_ctr
             D['TX'].t -= t_wf_ctr
+            # subtract the background noise
             D['TX'].subBG(t50_minus=3)
+            # calculate tc (centroid time relative to t0)
             D['TX'].tc = D['TX'].threshold_centroid(fraction=0.38)
-            #D_out_TX, catalog_buffers[ch]=fit_catalog(D['TX'],  {0:TX[ch]}, np.arange(0, 2, 0.25), np.arange(-2, 3, 0.25), t_tol=0.25, sigma_tol=0.125, return_catalog=True, catalog=catalog_buffers[ch])
-            #N_out=len(D_out_TX['A'])
-            #for field in ['t0','A','R','shot','sigma']:
-            #    out_h5['/TX/%s/%s' % (ch, field)][outShot0:outShot0+N_out]=D_out_TX[field]
-
+            #D_out_TX, catalog_buffers= fit_catalogs({ch:D['TX']}, TX_library, sigmas, delta_ts, \
+            #                            t_tol=0.25, sigma_tol=0.25,  \
+            #                            return_catalogs=True,  catalogs=catalog_buffers)
+            D_out_TX = fit_catalogs({ch:D['TX']}, TX_library, sigmas, delta_ts, \
+                                        t_tol=0.25, sigma_tol=0.25,  \
+                                        return_catalogs=False,  catalogs=TX_catalog_buffers)
+            N_out=len(D_out_TX[ch]['A'])
+            for field in ['t0','A','R','shot']:
+                out_h5['/TX/%s/%s' % (ch, field)][outShot0:outShot0+N_out]=D_out_TX[ch][field].ravel()
+            out_h5['/TX/%s/%s' % (ch, 'sigma')][outShot0:outShot0+N_out]=D_out_TX['both']['sigma'].ravel()
             wf_data[ch]=D['RX']
             wf_data[ch]=wf_data[ch][np.in1d(wf_data[ch].shots, ch_shots)]
             t_wf_ctr = np.nanmean(wf_data[ch].t)
@@ -139,26 +169,40 @@ def main(args):
             wf_data[ch].subBG(t50_minus=3)
 
             if 'latitude' in D:
-                # only one channel has geolocation information.  Write it out now.
-                these_shots=np.in1d(wf_data[ch].shots, ch_shots)
-                for field in outDS['location']:
-                    out_h5['location'][field][outShot0:outShot0+len(these_shots)]=D[field][these_shots]
+                # only one channel has geolocation information. Copy it, will use the 'shot' field to match it to the output data
+                loc_info={ff:D[ff] for ff in outDS['location']}
+                loc_info['channel']=ch
+                loc_info['shot']=D['shots']
 
             wf_data[ch].tc = wf_data[ch].threshold_centroid(fraction=0.38)
+        # now fit the returns with the waveform model
+        tic=time()
         D_out, catalog_buffers= fit_catalogs(wf_data, WF_library, sigmas, delta_ts, \
                                             t_tol=0.25, sigma_tol=0.25, return_data_est=args.waveforms, \
                                             return_catalogs=True,  catalogs=catalog_buffers, params=outDS)
 
         delta_time=time()-tic
-        N_out=D_out['both']['R'].size
 
-        for ch in ['both']+channels:
-            for key in outDS[ch]:
+        # write out the fit information
+        N_out=D_out['both']['R'].size
+        for ch in channels:
+            for key in outDS['ch']:
                 try:
                     out_h5[ch][key][outShot0:outShot0+N_out]=D_out[ch][key].ravel()
                 except OSError:
-                    print("OSError for key=%s, outshot0=%d, outshotN=%d, nDS=%d"% (key, outShot0, outShot0+N_out, out_h5[key].size))
+                    print("OSError for channel %s,  key=%s, outshot0=%d, outshotN=%d, nDS=%d"% (ch, key, outShot0, outShot0+N_out, out_h5[key].size))
+        for key in outDS['both']:
+            try:
+                out_h5['both'][key][outShot0:outShot0+N_out]=D_out['both'][key].ravel()
+            except OSError:
+                print("OSError for both channels, key=%s, outshot0=%d, outshotN=%d, nDS=%d"% (key, outShot0, outShot0+N_out, out_h5[key].size))
 
+        # write out the location info
+        loc_ind=np.flatnonzero(np.in1d(loc_info['shot'], D_out[loc_info['channel']]['shot']))
+        for field in outDS['location']:
+            out_h5['location'][field][outShot0:outShot0+N_out]=loc_info[field][loc_ind]
+
+        # write out the waveforms
         if args.waveforms:
             for ch in channels:
                 out_h5['RX/'+ch+'/p_fit'][:, outShot0:outShot0+N_out] = D_out[ch]['wf_est']
@@ -172,19 +216,23 @@ def main(args):
 
     out_h5.close()
 
+# parse the input arguments
 if __name__=="__main__":
-    parser = argparse.ArgumentParser(description='Fit the waveforms from an ATM file with a set of scattering parameters')
-    parser.add_argument('input_files', type=str, nargs=2)
+
+    n_chan=int(sys.argv[1])
+    del(sys.argv[1])
+    parser = argparse.ArgumentParser(description='Fit the waveforms from an ATM file with a set of scattering parameters.\n The first argument gives the number of channels')
+    parser.add_argument('input_files', type=str, nargs=n_chan)
     parser.add_argument('output_file', type=str)
     parser.add_argument('--startShot', '-s', type=int, default=0)
-    parser.add_argument('--scat_files', '-f', type=str, nargs=2, default=None)
+    parser.add_argument('--scat_files', '-f', type=str, nargs=n_chan, default=None)
     parser.add_argument('--nShots', '-n', type=int, default=np.Inf)
     parser.add_argument('--DOPLOT', '-P', action='store_true')
     parser.add_argument('--skipRX', action='store_true', default=False)
     parser.add_argument('--everyNTX', type=int, default=100)
     parser.add_argument('--reduce_by', '-r', type=int, default=1)
-    parser.add_argument('--TXfiles', '-T', type=str, nargs=2, default=None)
+    parser.add_argument('--TXfiles', '-T', type=str, nargs=n_chan, default=None)
     parser.add_argument('--waveforms', '-w', action='store_true', default=False)
-    parser.add_argument('--ch_names','-c', type=str, nargs=2, default=['IR','G'])
+    parser.add_argument('--ch_names','-c', type=str, nargs=n_chan, default=['IR','G'])
     args=parser.parse_args()
     main(args)
