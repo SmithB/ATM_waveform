@@ -275,7 +275,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
         except KeyboardInterrupt:
             sys.exit()
         except Exception as e:
-            print("Exception thrown for shot %d" % WF.shots)
+            print("Exception thrown for shot %d" % WF[channels[0]].shots)
             print(e)
             pass
         if np.mod(WF_count, 1000)==0 and WF_count > 0:
