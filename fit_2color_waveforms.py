@@ -6,6 +6,7 @@ Created on Mon Nov  5 16:56:31 2018
 """
 import numpy as np
 #from numpy.linalg import inv
+import sys
 import matplotlib.pyplot as plt
 #import bisect
 from ATM_waveform.waveform import waveform
@@ -45,7 +46,7 @@ def fit_broadened(delta_ts, sigmas,  WFs, catalogs,  Ms, key_top, sigma_tol=0.12
     else:
         dSigma=np.max(sigmas)/4.
     if np.any(~np.isfinite(sigmas)):
-        print("NaN in sigma for %d " % WFs[0].shots)
+        print("NaN in sigma for shot %d " % WFs[channels[0]].shots)
 
     if sigma_last is not None:
         i1=np.maximum(1, np.argmin(np.abs(sigmas-sigma_last)))
@@ -158,7 +159,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
         Ms={ch:listDict() for ch in channels}
         # this is the bulk of the work, and it's where problems happen.  Wrap it in a try:
         # and write out errors to be examined later
-        if True:
+        try:
             if len(k_vals)>1:
                  # find the best misfit between this template and the waveform
                 fB=lambda ind:fit_broadened(delta_ts, None, WF, catalogs, Ms, [k_vals[ind]], sigma_tol=sigma_tol, t_tol=t_tol, sigma_last=sigma_last, refine_sigma=True)
@@ -271,12 +272,12 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                 print(WF_count)
             if M_list is not None:
                 M_list += [Ms]
-        #except KeyboardInterrupt:
-        #    sys.exit()
-        #except Exception as e:
-        #    print("Exception thrown for shot %d" % WF.shots)
-        #    print(e)
-        #    pass
+        except KeyboardInterrupt:
+            sys.exit()
+        except Exception as e:
+            print("Exception thrown for shot %d" % WF.shots)
+            print(e)
+            pass
         if np.mod(WF_count, 1000)==0 and WF_count > 0:
             print('    N=%d, N_keys=%d, %d' % (WF_count, len(list(catalogs[channels[0]])), len(list(catalogs[channels[1]]))))
 

@@ -12,7 +12,7 @@ import sys
 from ATM_waveform.waveform import waveform
 #import
 #from ATM_waveform.corr_no_mean import corr_no_mean
-from corr_no_mean import corr_no_mean
+from .corr_no_mean import corr_no_mean
 from time import time
 DOPLOT=False
 
