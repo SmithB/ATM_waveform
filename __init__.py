@@ -9,3 +9,5 @@ Created on Sun Jun 30 21:12:24 2019
 from .fit_waveforms import *
 from .waveform import *
 from .read_ATM_wfs import *
+from .corr_no_mean import *
+

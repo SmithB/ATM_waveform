@@ -14,7 +14,7 @@ from math import pi
 
 @cython.boundscheck(False)
 @cython.cdivision(True)
-def corr_no_mean_cython(np.ndarray[double, ndim=1] x, np.ndarray[double, ndim=1] y, np.ndarray[double, ndim=1] x2, np.ndarray[int, ndim=1] mask, int N):
+def corr_no_mean(np.ndarray[double, ndim=1] x, np.ndarray[double, ndim=1] y, np.ndarray[double, ndim=1] x2, np.ndarray[int, ndim=1] mask, int N):
     """
         Efficient correlation calculation for two arrays, skippning mean subtraction
 
