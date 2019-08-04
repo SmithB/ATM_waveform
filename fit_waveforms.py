@@ -242,21 +242,13 @@ def wf_misfit(delta_t, sigma, WF, catalog, M, key_top,  G=None, return_data_est=
             # if not, make it.
             M[this_key]=listDict()
             temp_p = np.interp(WF.t.ravel(), (catalog[key_top].t-catalog[key_top].tc+delta_t).ravel(), broadened_p.ravel(), left=np.NaN, right=np.NaN)
-            try:
-                # Note that argmax on a binary array returns the first nonzero index (faster than where)
-                ii=np.argmax(temp_p>0.01*np.nanmax(temp_p))
-                #ii=np.where(temp_p>0.002*np.nanmax(temp_p))[0][0]
-            except IndexError:
-                print("no ii")
-                ii=np.argmax(temp_p>0.01*np.nanmax(temp_p))
-                #ii=np.where(temp_p>0.002*np.nanmax(temp_p))[0]
+            # Note that argmax on a binary array returns the first nonzero index (faster than where)
+            ii=np.argmax(temp_p>0.01*np.nanmax(temp_p))
             mask=np.ones_like(temp_p, dtype=bool)
             mask[0:ii-4] = False
             catalog[this_key] = waveform(catalog[broadened_key].t, temp_p,
                    tc=catalog[broadened_key].tc, t0=catalog[broadened_key].t0)
             catalog[this_key].params['mask']=mask
-            #catalog[this_key].params['Ginv']=None
-            #catalog[this_key].params['good']=None
         this_entry=catalog[this_key]
         if fit_BG:
             # solve for the background and the amplitude
