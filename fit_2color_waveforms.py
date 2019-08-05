@@ -57,11 +57,14 @@ def fit_broadened(delta_ts, sigmas,  WFs, catalogs,  Ms, key_top, sigma_tol=0.12
     sigma_best, R_best = golden_section_search(fSigma, sigma_list, dSigma, bnds=[0, sigma_max], tol=sigma_tol, max_count=20, refine_parabolic=refine_sigma, search_hist=search_hist)
 
     if refine_sigma:
-        R_best=fSigma(sigma_best)
-    #this_key=key_top+[sigma_best]
-    # assign the 'best' to each M
-    #for _, M in Ms.items():
-    #    M[key_top]['best']={'key':this_key,'R':M[this_key]['best']['R']}
+        # calculate the misfit at this exact sigma value
+        R_best=0
+        for ch in channels:
+            # pass in a temporary catalog so that the top-level catalogs don't
+            # get populated with entries that won't get reused
+            this_catalog=listDict()
+            this_catalog[(key_top)]=catalogs[ch][key_top]
+            R_best += broadened_misfit(delta_ts, sigma_best, WFs[ch], this_catalog, Ms[ch], key_top, t_tol=t_tol, refine_parabolic=True)/WFs[ch].noise_RMS
     return R_best
 
 def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, return_data_est=False, return_catalogs=False, catalogs=None, params=None, M_list=None):
