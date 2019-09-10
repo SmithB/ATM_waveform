@@ -14,7 +14,7 @@ def gaussian(x, ctr, sigma):
     return 1/(sigma*np.sqrt(2*np.pi))*np.exp(-(x-ctr)**2/2/sigma**2)
 
 class waveform(object):
-    __slots__=['p','t','t0', 'dt', 'tc', 'size', 'nSamps', 'nPeaks','shots','params','noise_RMS', 'p_squared','FWHM','seconds_of_day']
+    __slots__=['p','t','t0', 'dt', 'tc', 't_shift', 'size', 'nSamps', 'nPeaks','shots','params','noise_RMS', 'p_squared','FWHM','seconds_of_day']
     """
         Waveform class contains tools to work data that give power as a function of time
 
@@ -26,6 +26,7 @@ class waveform(object):
             t0: Offset time added to t (size)
             dt: time spacing of t
             tc: center time of the trace
+            t_shift: any time shfits that have been applied to the waveform
             nPeaks: number of peaks in each trace
             shots: shot number of each trace
             noise_RMS: background noise estimate for each trace
@@ -33,7 +34,7 @@ class waveform(object):
             FWHM: full width at half maximum of each trace
             seconds_of_day: time of day for each trace
     """
-    def __init__(self, t, p, t0=0., tc=0., nPeaks=1, shots=None, noise_RMS=None, p_squared=None, FWHM=None, seconds_of_day=None):
+    def __init__(self, t, p, t0=0., tc=0., t_shift=0,  nPeaks=1, shots=None, noise_RMS=None, p_squared=None, FWHM=None, seconds_of_day=None):
         self.t=t
         self.t.shape=[t.size,1]
         self.dt=t[1]-t[0]

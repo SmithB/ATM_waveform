@@ -109,14 +109,15 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
 
     # make an empty output_dictionary
     if params is None:
-        params={'ch':['R','A','B','noise_RMS', 'delta_t', 'shot', 't0','tc'], 'both':['K0','R','sigma','Kmin','Kmax']}
+        params={'ch':['R','A','B','noise_RMS', 'delta_t', 'shot', 't0','tc','t_shift'], 'both':['K0','R','sigma','Kmin','Kmax']}
     WFp_empty={}
     for ch in channels:
         WFp_empty[ch]={f:np.NaN for f in params['ch']}
     WFp_empty['both']={f:np.NaN for f in params['both']}
     if return_data_est:
         for ch in channels:
-            WFp_empty[ch]['wf_est']=np.zeros_like(WFs.t)+np.NaN
+            WFp_empty[ch]['wf_est']=np.zeros_like(WFs[ch].t)+np.NaN
+            WFp_empty[ch]['t_shift']=np.NaN
 
     if catalogs is None:
         catalogs={ch:listDict() for ch in channels}
@@ -157,6 +158,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
             WF[ch].p = integer_shift(WF[ch].p, -delta_samp)
             WF[ch].t0 += delta_samp*WF[ch].dt
             WF[ch].tc -= delta_samp*WF[ch].dt
+            WF[ch].t_shift = delta_samp*WF[ch].dt
 
         # set up a matching dictionary (contains keys of waveforms and their misfits)
         Ms={ch:listDict() for ch in channels}
@@ -236,14 +238,16 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
             for ch in channels:
                 fit_params[ch]['shot']=WF[ch].shots[0]
                 fit_params[ch]['t0']=WF[ch].t0[0]
+                fit_params[ch]['t_shift']=WF[ch].t_shift[0]
                 fit_params[ch]['noise_RMS']=WF[ch].noise_RMS[0]
             #print(this_key+[R[iR][0]])
             if return_data_est or DOPLOT:
                 # call WF_misfit for each channel
                 wf_est={}
                 for ch, WFi in WF.items():
-                    R0, wf_est[ch]=wf_misfit(fit_params[ch]['delta_t'], fit_params[ch]['sigma'], WF[ch], catalogs[ch], Ms[ch], [this_key[0]], return_data_est=True)
-                fit_params[ch]['wf_est']=wf_est
+                    R0, wf_est=wf_misfit(fit_params[ch]['delta_t'], fit_params[ch]['sigma'], WF[ch], catalogs[ch], Ms[ch], [this_key[0]], return_data_est=True)
+                    fit_params[ch]['wf_est']=wf_est
+                    fit_params[ch]['t_shift']=WF[ch].t_shift
 
             if KEY_SEARCH_PLOT:
                 ch_keys={}

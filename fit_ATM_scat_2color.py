@@ -86,7 +86,7 @@ def main(args):
         for ch in channels:
             out_h5.create_dataset('RX/%s/p' % ch, (192, nWFs))
             out_h5.create_dataset('RX/%s/p_fit' % ch, (192, nWFs))
-
+            out_h5.create_dataset('RX/%s/t_shift' % ch, (nWFs,))
     TX={}
     # get the transmit pulse
     for ind, ch in enumerate(channels):
@@ -140,7 +140,7 @@ def main(args):
             ch_shots=shots[ch][these_shots]
             # make the return waveform structure
             D=read_ATM_file(input_files[ch], shot0=ch_shots[0], nShots=ch_shots[-1]-ch_shots[0]+1)
-
+            clipped=D['RX'].p >= 255
             # fit the transmit data for this channel and these pulses
             D['TX']=D['TX'][np.in1d(D['TX'].shots, ch_shots)]
             # set t0 to the center of the waveform
@@ -175,6 +175,7 @@ def main(args):
                 loc_info['shot']=D['shots']
 
             wf_data[ch].tc = wf_data[ch].threshold_centroid(fraction=0.38)
+            #wf_data[ch].p[clipped]=np.NaN
         # now fit the returns with the waveform model
         tic=time()
         D_out, catalog_buffers= fit_catalogs(wf_data, WF_library, sigmas, delta_ts, \
@@ -205,14 +206,16 @@ def main(args):
         # write out the waveforms
         if args.waveforms:
             for ch in channels:
-                out_h5['RX/'+ch+'/p_fit'][:, outShot0:outShot0+N_out] = D_out[ch]['wf_est']
+                out_h5['RX/'+ch+'/p_fit'][:, outShot0:outShot0+N_out] = np.squeeze(D_out[ch]['wf_est']).T
                 out_h5['RX/'+ch+'/p'][:, outShot0:outShot0+N_out] = wf_data[ch].p
+                out_h5['RX/'+ch+'/t_shift'][outShot0:outShot0+N_out] = D_out[ch]['t_shift'].ravel()
 
         print("  shot=%d out of %d, N_keys=%d, dt=%5.1f" % (shot0+blocksize, start_vals[-1]+blocksize, len(catalog_buffers['G'].keys()), delta_time))
     print("   time to fit RX=%3.2f" % (time()-time_old))
 
     if args.waveforms:
-        out_h5.create_dataset('RX/t', data=D_out.t.ravel())
+        for ch in channels:
+            out_h5.create_dataset('RX/'+ch+'/t', data=wf_data[ch].t.ravel())
 
     out_h5.close()
 
