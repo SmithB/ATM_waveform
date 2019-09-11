@@ -140,7 +140,7 @@ def main(args):
             ch_shots=shots[ch][these_shots]
             # make the return waveform structure
             D=read_ATM_file(input_files[ch], shot0=ch_shots[0], nShots=ch_shots[-1]-ch_shots[0]+1)
-            clipped=D['RX'].p >= 255
+            
             # fit the transmit data for this channel and these pulses
             D['TX']=D['TX'][np.in1d(D['TX'].shots, ch_shots)]
             # set t0 to the center of the waveform
@@ -161,8 +161,11 @@ def main(args):
             for field in ['t0','A','R','shot']:
                 out_h5['/TX/%s/%s' % (ch, field)][outShot0:outShot0+N_out]=D_out_TX[ch][field].ravel()
             out_h5['/TX/%s/%s' % (ch, 'sigma')][outShot0:outShot0+N_out]=D_out_TX['both']['sigma'].ravel()
+
             wf_data[ch]=D['RX']
             wf_data[ch]=wf_data[ch][np.in1d(wf_data[ch].shots, ch_shots)]
+            # identify the samples that have clipped amplitudes:
+            clipped=wf_data[ch].p >= 255
             t_wf_ctr = np.nanmean(wf_data[ch].t)
             wf_data[ch].t -= t_wf_ctr
             wf_data[ch].t0 += t_wf_ctr
@@ -175,7 +178,7 @@ def main(args):
                 loc_info['shot']=D['shots']
 
             wf_data[ch].tc = wf_data[ch].threshold_centroid(fraction=0.38)
-            #wf_data[ch].p[clipped]=np.NaN
+            wf_data[ch].p[clipped]=np.NaN
         # now fit the returns with the waveform model
         tic=time()
         D_out, catalog_buffers= fit_catalogs(wf_data, WF_library, sigmas, delta_ts, \
