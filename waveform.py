@@ -14,7 +14,7 @@ def gaussian(x, ctr, sigma):
     return 1/(sigma*np.sqrt(2*np.pi))*np.exp(-(x-ctr)**2/2/sigma**2)
 
 class waveform(object):
-    __slots__=['p','t','t0', 'dt', 'tc', 't_shift', 'size', 'nSamps', 'nPeaks','shots','params','noise_RMS', 'p_squared','FWHM','seconds_of_day']
+    __slots__=['p','t','t0', 'dt', 'tc', 't_shift', 'size', 'error_flag', 'nSamps', 'nPeaks','shots','params','noise_RMS', 'p_squared','FWHM','seconds_of_day']
     """
         Waveform class contains tools to work data that give power as a function of time
 
@@ -45,6 +45,7 @@ class waveform(object):
         self.nSamps=self.p.shape[0]
         self.params=dict()
         self.p_squared=p_squared
+        self.error_flag = np.zeros(self.size, dtype=int)
         # turn keyword arguments into 1-d arrays of size (self.size,)
         kw_dict={'t0':t0, 'tc':tc, 'nPeaks':nPeaks,'shots':shots, 'noise_RMS':noise_RMS, 'seconds_of_day':seconds_of_day, 'FWHM': FWHM}
         for key, val in kw_dict.items():
@@ -70,7 +71,7 @@ class waveform(object):
 
     def __getitem__(self, key):
         result=waveform(self.t, self.p[:,key])
-        for field in ['t0','tc','nPeaks', 'shots','noise_RMS','seconds_of_day','FWHM']:
+        for field in ['t0','tc','nPeaks', 'shots','noise_RMS','seconds_of_day','FWHM','error_flag']:
             temp=getattr(self, field)
             if temp is not None:
                 if isinstance(key, np.ndarray):
@@ -228,7 +229,10 @@ class waveform(object):
             temp = self.t[i50-1] + dp*self.dt
             # linear interpolation between the last p>50 value and the next value
             i50=ii[-1]+1
-            dp=(p50 - p[i50-1]) / (p[i50] - p[i50-1])
+            if np.isfinite(p[i50]):
+                dp=(p50 - p[i50-1]) / (p[i50] - p[i50-1])
+            else:
+                dp=0
             FWHM[col] = self.t[i50-1] + dp*self.dt - temp
         self.FWHM=FWHM
         return FWHM

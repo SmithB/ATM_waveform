@@ -46,8 +46,7 @@ def fit_broadened(delta_ts, sigmas,  WFs, catalogs,  Ms, key_top, sigma_tol=0.12
     else:
         dSigma=np.max(sigmas)/4.
     if np.any(~np.isfinite(sigmas)):
-        print("NaN in sigma for shot %d " % WFs[channels[0]].shots)
-
+        print("NaN in sigma for shot %d " % WFs[channels[0]].shots)    
     if sigma_last is not None:
         i1=np.maximum(1, np.argmin(np.abs(sigmas-sigma_last)))
     else:
@@ -147,6 +146,12 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
     for WF_count in range(N_shots):
         fit_params=deepcopy(WFp_empty)
         WF={ch:WFs[ch][WF_count] for ch in channels}
+        
+        # skip waveforms for which we detected an error (so far just waveforms that have t0 far from the calrng value)
+        if np.any([WF[ch].error_flag for ch in WF.keys()]):
+            continue
+        if np.any([np.isnan(WF[ch].tc) for ch in WF.keys()]):
+            continue
         # skip multi-peak returns:
         #n_peaks=np.array([WF[ch].nPeaks for ch in channels])
         #if np.any(n_peaks > 1):
@@ -226,7 +231,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                      ind_k_vals=np.argsort(R[these])
                      these=these[ind_k_vals[0:4]]
                 E_roots=np.polynomial.polynomial.Polynomial.fit(np.log10(searched_k_vals[these]), R[these]-R_max, 2).roots()
-                if np.any(np.imag(E_roots)!=0):
+                if (len(E_roots)==0) or np.any(np.imag(E_roots)!=0):
                     fit_params['both']['Kmax']=10**np.minimum(3,np.polynomial.polynomial.Polynomial.fit(np.log10(searched_k_vals[these]), R[these]-R_max, 1).roots()[0])
                     fit_params['both']['Kmin']=np.min(searched_k_vals[R<R_max])
                 else:

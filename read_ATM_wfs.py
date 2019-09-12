@@ -109,15 +109,18 @@ def read_ATM_file(fname, getCountAndReturn=False, shot0=0, nShots=np.Inf, readTX
             result={}
         result['calrng']=D_in['/laser/calrng']
         result['seconds_of_day']=D_in['/waveforms/twv/shot/seconds_of_day']
+        
         if readTX:
             TX=np.c_[TX].transpose()
             result['TX']=waveform(np.arange(TX.shape[0])*dt, TX, shots=shots, t0=tx_samp0*dt, seconds_of_day=D_in['/waveforms/twv/shot/seconds_of_day'])
-
+            
+        L_TX = 30
         if readRX:
             RX=np.c_[RX].transpose()
             nPeaks=np.c_[nPeaks].ravel()
             result['RX']=waveform(np.arange(RX.shape[0])*dt, RX, shots=shots, nPeaks=nPeaks, t0=rx_samp0*dt, seconds_of_day=D_in['/waveforms/twv/shot/seconds_of_day'])
             result['rx_samp0']=rx_samp0
+            result['RX'].error_flag[np.abs(result['calrng']-(result['RX'].t0*.15-L_TX))>55] = 1
         result['shots']=shots
     return result
 

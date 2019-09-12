@@ -163,6 +163,15 @@ def gaussian(x, ctr, sigma):
     """
     return 1/(sigma*np.sqrt(2*np.pi))*np.exp(-(x-ctr)**2/2/sigma**2)
 
+def broaden_p(wf, sigma):
+    if sigma==0:
+        return wf.p
+    nK = np.minimum(np.floor(wf.p.size/2)-1,3*np.ceil(sigma/wf.dt))
+    tK = np.arange(-nK, nK+1)*wf.dt
+    K = gaussian(tK, 0, sigma)
+    K /= np.sum(K)
+    return np.convolve(wf.p.ravel(), K,'same')
+
 def amp_misfit(x, y, els=None, A=None, x_squared=None):
     """
     misfit for the best-fitting scaled template model.
@@ -232,16 +241,21 @@ def wf_misfit(delta_t, sigma, WF, catalog, M, key_top,  G=None, return_data_est=
             if sigma==0:
                  broadened_p = catalog[key_top].p
             else:
-                nK=3*np.ceil(sigma/WF.dt)
-                tK=np.arange(-nK, nK+1)*WF.dt
-                K=gaussian(tK, 0, sigma)
-                broadened_p=np.convolve(catalog[key_top].p.ravel(), K,'same')
+                broadened_p = broaden_p( catalog[key_top], sigma)
+                #nK=np.minimum(np.floor(catalog[key_top].p.size/2)-1,3*np.ceil(sigma/WF.dt))
+                #tK=np.arange(-nK, nK+1)*WF.dt
+                #K=gaussian(tK, 0, sigma)
+                #K /= np.sum(K)
+                #broadened_p=np.convolve(catalog[key_top].p.ravel(), K,'same')
             catalog[broadened_key]=waveform(catalog[key_top].t, broadened_p, t0=catalog[key_top].t0, tc=catalog[key_top].tc)
         # check if the shifted version of the broadened waveform is in the catalog
         if this_key not in catalog:
             # if not, make it.
             M[this_key]=listDict()
-            temp_p = np.interp(WF.t.ravel(), (catalog[key_top].t-catalog[key_top].tc+delta_t).ravel(), broadened_p.ravel(), left=np.NaN, right=np.NaN)
+            try:
+                temp_p = np.interp(WF.t.ravel(), (catalog[key_top].t-catalog[key_top].tc+delta_t).ravel(), broadened_p.ravel(), left=np.NaN, right=np.NaN)
+            except Exception as e:
+                print("HERE")
             # Note that argmax on a binary array returns the first nonzero index (faster than where)
             ii=np.argmax(temp_p>0.01*np.nanmax(temp_p))
             mask=np.ones_like(temp_p, dtype=bool)
@@ -325,12 +339,13 @@ def broadened_misfit(delta_ts, sigma, WF, catalog, M, key_top,  t_tol=None, refi
             if sigma==0:
                 catalog[this_key]=waveform(catalog[key_top].t, catalog[key_top].p, t0=catalog[key_top].t0, tc=catalog[key_top].tc)
             else:
-                nK=3*np.ceil(sigma/WF.dt)
-                tK=np.arange(-nK, nK+1)*WF.dt
-                K=gaussian(tK, 0, sigma)
-                K=K/np.sum(K)
+                #nK=np.minimum(np.floor(catalog[key_top].p.size/2)-1,3*np.ceil(sigma/WF.dt))
+                #tK=np.arange(-nK, nK+1)*WF.dt
+                #K=gaussian(tK, 0, sigma)
+                #K=K/np.sum(K)
                 try:
-                    catalog[this_key]=waveform(catalog[key_top].t, np.convolve(catalog[key_top].p.ravel(), K,'same'))
+                    catalog[this_key]=waveform(catalog[key_top].t, broaden_p(catalog[key_top], sigma))
+                    #catalog[this_key]=waveform(catalog[key_top].t, np.convolve(catalog[key_top].p.ravel(), K,'same'))
                 except ValueError:
                     print("Convolution failed")
         return fit_shifted(delta_ts, sigma, catalog, WF,  M, key_top, t_tol=t_tol, refine_parabolic=refine_parabolic)
