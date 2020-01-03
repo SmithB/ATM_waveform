@@ -5,9 +5,9 @@ Created on Tue Feb 19 09:47:58 2019
 @author: ben
 """
 import numpy as np
-from IS2_calval.waveform import waveform
-from IS2_calval.fit_waveforms  import gaussian
-from IS2_calval.fit_ATM_scat import proc_RX, make_rx_scat_catalog
+from ATM_waveform.waveform import waveform
+from ATM_waveform.fit_waveforms  import gaussian
+from ATM_waveform.fit_ATM_scat import proc_RX, make_rx_scat_catalog
 import h5py
 import sys
 import os
