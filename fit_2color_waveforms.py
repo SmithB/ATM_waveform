@@ -38,20 +38,32 @@ def fit_broadened(delta_ts, sigmas,  WFs, catalogs,  Ms, key_top, sigma_tol=0.12
         for ch in channels:
             sigma_template=catalogs[ch][key_top].fwhm()[0]/FWHM2sigma
             sigma_WF=WFs[ch].fwhm()[0]/FWHM2sigma
+            # if fwhm() doesn't work, just use an arbitrary value for sigma_WF
+            if ~np.isfinite(sigma_WF):
+                sigma_WF=sigma_max/2
             #estimate broadening from template WF to measured WF
             sigma_extra=np.sqrt(np.maximum(0,  sigma_WF**2-sigma_template**2))
             sigma0=np.maximum(sigma0, sigma_step*np.ceil(sigma_extra/sigma_step))
         dSigma=np.maximum(sigma_step, np.ceil(sigma0/4.))
+        if sigma0+dSigma > sigma_max or ~np.isfinite(sigma0):
+            dSigma=0.25*sigma_max
+            sigma0=0.75*sigma_max
         sigmas=np.unique([0., np.maximum(sigma_step, sigma0-dSigma), sigma0, np.maximum(sigma_step, sigma0+dSigma)])
     else:
         dSigma=np.max(sigmas)/4.
-    if np.any(~np.isfinite(sigmas)):
-        print("NaN in sigma for shot %d " % WFs[channels[0]].shots)    
     if sigma_last is not None:
         i1=np.maximum(1, np.argmin(np.abs(sigmas-sigma_last)))
     else:
         i1=len(sigmas)-1
     sigma_list=[sigmas[0], sigmas[i1]]
+    if np.any(~np.isfinite(sigmas)):
+        print("NaN in sigma for shot %d " % WFs[channels[0]].shots)
+        if np.nanmax(sigmas) > np.nanmin(sigmas):
+            sigma_list=[np.nanmax([np.nanmax([0, np.nanmin(sigmas)])]), \
+                        np.nanmin([sigma_max, np.nanmax(sigmas)])]
+        else:
+            sigma_list=[0, sigma_max]
+        dSigma=(np.max(sigma_list)-np.min(sigma_list))/4.
     search_hist={}
     sigma_best, R_best = golden_section_search(fSigma, sigma_list, dSigma, bnds=[0, sigma_max], tol=sigma_tol, max_count=20, refine_parabolic=refine_sigma, search_hist=search_hist)
 
@@ -146,7 +158,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
     for WF_count in range(N_shots):
         fit_params=deepcopy(WFp_empty)
         WF={ch:WFs[ch][WF_count] for ch in channels}
-        
+
         # skip waveforms for which we detected an error (so far just waveforms that have t0 far from the calrng value)
         if np.any([WF[ch].error_flag for ch in WF.keys()]):
             continue
@@ -225,14 +237,18 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
             R = np.array([R_dict[ki] for ki in searched_k_vals]).ravel()
 
             R_max=fit_params['both']['R']*(1.+1./np.sqrt(N_samps))
-            if np.sum(searched_k_vals>0)>=3:
+
+            if np.sum(searched_k_vals>0)>=0:
                 these=np.flatnonzero(searched_k_vals>0)
+            if np.sum(R[these]>0) > 2:
                 if len(these) > 3:
                      ind_k_vals=np.argsort(R[these])
                      these=these[ind_k_vals[0:4]]
                 E_roots=np.polynomial.polynomial.Polynomial.fit(np.log10(searched_k_vals[these]), R[these]-R_max, 2).roots()
                 if (len(E_roots)==0) or np.any(np.imag(E_roots)!=0):
-                    fit_params['both']['Kmax']=10**np.minimum(3,np.polynomial.polynomial.Polynomial.fit(np.log10(searched_k_vals[these]), R[these]-R_max, 1).roots()[0])
+                    fit_params['both']['Kmax']=10**np.minimum(3,\
+                              np.polynomial.polynomial.Polynomial.fit(\
+                              np.log10(searched_k_vals[these]), R[these]-R_max, 1).roots()[0])
                     fit_params['both']['Kmin']=np.min(searched_k_vals[R<R_max])
                 else:
                     fit_params['both']['Kmin']=10**np.min(E_roots)
