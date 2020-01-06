@@ -12,7 +12,7 @@ import sys
 from ATM_waveform.waveform import waveform
 #import
 #from ATM_waveform.corr_no_mean import corr_no_mean
-from ATM_waveform import corr_no_mean
+from ATM_waveform.corr_no_mean import corr_no_mean
 from time import time
 DOPLOT=False
 
@@ -242,20 +242,13 @@ def wf_misfit(delta_t, sigma, WF, catalog, M, key_top,  G=None, return_data_est=
                  broadened_p = catalog[key_top].p
             else:
                 broadened_p = broaden_p( catalog[key_top], sigma)
-                #nK=np.minimum(np.floor(catalog[key_top].p.size/2)-1,3*np.ceil(sigma/WF.dt))
-                #tK=np.arange(-nK, nK+1)*WF.dt
-                #K=gaussian(tK, 0, sigma)
-                #K /= np.sum(K)
-                #broadened_p=np.convolve(catalog[key_top].p.ravel(), K,'same')
             catalog[broadened_key]=waveform(catalog[key_top].t, broadened_p, t0=catalog[key_top].t0, tc=catalog[key_top].tc)
         # check if the shifted version of the broadened waveform is in the catalog
         if this_key not in catalog:
             # if not, make it.
             M[this_key]=listDict()
-            try:
-                temp_p = np.interp(WF.t.ravel(), (catalog[key_top].t-catalog[key_top].tc+delta_t).ravel(), broadened_p.ravel(), left=np.NaN, right=np.NaN)
-            except Exception as e:
-                print("HERE")
+            temp_p = np.interp(WF.t.ravel(), (catalog[key_top].t-catalog[key_top].tc+delta_t).ravel(), broadened_p.ravel(), left=np.NaN, right=np.NaN)
+
             # Note that argmax on a binary array returns the first nonzero index (faster than where)
             ii=np.argmax(temp_p>0.01*np.nanmax(temp_p))
             mask=np.ones_like(temp_p, dtype=bool)
