@@ -15,7 +15,7 @@ import os
 import scipy.stats as sps
 import matplotlib.pyplot as plt
 
-def plot_scat_fit_error(in_file, A_val=200, sigma_val=0, ax=None, line_color='r'):
+def plot_scat_fit_error(in_file, A_val=1, sigma_val=0, ax=None, line_color='r'):
 
     if ax is None:
         plt.figure();
@@ -26,7 +26,7 @@ def plot_scat_fit_error(in_file, A_val=200, sigma_val=0, ax=None, line_color='r'
         plt.sca(ax)
         no_show=True
     with h5py.File(in_file,'r') as h5f:
-        A=np.array(h5f['A'])
+        A=np.array(h5f['A_scale'])
         sigma=np.array(h5f['sigma'])
         ii=((A==A_val) & (sigma==sigma_val) & (np.array(h5f['K0'])>0))
         nData=np.sum(ii)
