@@ -12,6 +12,7 @@ from ATM_waveform.fit_ATM_scat_2color import fit_catalogs
 import h5py
 import sys
 import os
+import time
 import scipy.stats as sps
 import matplotlib.pyplot as plt
 
@@ -94,7 +95,7 @@ def errors_for_one_scat_file(scat_files, TX_files, channels, out_file=None):
     # choose a set of delta t values
     delta_ts=np.arange(-1., 1.5, 0.5)
 
-    N_WFs=32
+    N_WFs=256
     TX={}
     # get the transmit pulse
     for ind, ch in enumerate(channels):
@@ -117,11 +118,11 @@ def errors_for_one_scat_file(scat_files, TX_files, channels, out_file=None):
         WF_library[ch].update({0.:TX[ch]})
         WF_library[ch].update(make_rx_scat_catalog(TX[ch], h5_file=args.scat_files[ind]))
 
-    out_fields=['K16','K84', 'sigma16', 'sigma84', 'sigma','A_scale','K0','Kmed', 'Ksigma','Ksigma_est', 'N']
+    out_fields=['K16','K84', 'sigma16', 'sigma84', 'sigma','A_scale','K0','Kmed', 'Ksigma','Ksigma_est', 'N','fitting_time']
     for ch in channels:
         out_fields.append('A_'+ch)
 
-    noise_RMS={'G':1, 'IR':5}
+    noise_RMS={'G':1, 'IR':0.25}
     unit_amp_target={'G':175, 'IR':140}
     sigma_vals=[0, 0.5, 1, 2]
     A_scale=[0.5, 1, 1.25]
@@ -147,8 +148,10 @@ def errors_for_one_scat_file(scat_files, TX_files, channels, out_file=None):
                 # calculate scaled and broadened waveforms
                 WFs=make_sim_WFs(N_WFs, WF_library, key, sigma, noise_RMS, amp_scale)
                 # fit the waveforms
+                tic=time.time()
                 D_out= fit_catalogs(WFs, WF_library, sigmas, delta_ts, \
                                             t_tol=0.25, sigma_tol=0.25)
+                Dstats['fitting_time'][ii]=time.time()-tic
                 for ch in channels:
                     Dstats['A_'+ch][ii]=WF_expected[ch].p.max()
                 sR=sps.scoreatpercentile(D_out['both']['sigma'], [16, 84])
@@ -164,7 +167,7 @@ def errors_for_one_scat_file(scat_files, TX_files, channels, out_file=None):
                 Dstats['Ksigma_est'][ii]=np.nanmedian(D_out['both']['Kmax']-D_out['both']['Kmin'])
                 Dstats['Ksigma'][ii]=np.nanstd(D_out['both']['K0'])
                 Dstats['N'][ii]=np.sum(np.isfinite(D_out['both']['K0']))
-                print([key, sigma, A, KR-key, Dstats['Ksigma'][ii]])
+                print('K0=%2.2g, sigma=%2.2f, A=%2.2f, ER=[%2.2g, %2.2g], E=%2.2g' %(key, sigma, A, KR[0]-key, KR[1]-key, Dstats['Ksigma'][ii]))
                 ii += 1
 
     print("yep")
@@ -190,22 +193,6 @@ if __name__=="__main__":
     args=parser.parse_args()
     Dstats=errors_for_one_scat_file(args.scat_files, args.TXfiles, args.colors,  args.output_file)
 
-
+# Example command lines:
 #2 2color_test.h5  -f SRF_IR_full.h5 SRF_green_full.h5  -T TX_IR.h5 TX_green.h5
 #1 green_only_test.h5  -f SRF_green_full.h5  -T TX_green.h5 -c G
-
-#if len(sys.argv)==4:
-#    scat_file=sys.argv[1]
-#    TX_file=sys.argv[2]
-#    out_file=sys.argv[3]
-#    Dstats=errors_for_one_scat_file(scat_file, TX_file, out_file=out_file)
-#else:
-#    plot_scat_fit_error(sys.argv[1], A_val=200, sigma_val=0)
-#    plot_scat_fit_error(sys.argv[1], A_val=50, sigma_val=0)
-#
-#    plot_scat_fit_error(sys.argv[1], A_val=200, sigma_val=1)
-#    plot_scat_fit_error(sys.argv[1], A_val=50, sigma_val=1)
-#
-#
-#    plot_scat_fit_error(sys.argv[1], A_val=200, sigma_val=2)
-#    plot_scat_fit_error(sys.argv[1], A_val=50, sigma_val=2)
