@@ -237,12 +237,17 @@ class waveform(object):
         self.FWHM=FWHM
         return FWHM
 
-    def calcMean(self, threshold=255):
+    def calc_mean(self, threshold=255, normalize=True):
         """
         Calculate the centroid of a distribution relative to a thresohold
         """
         good=np.sum( (~np.isfinite(self.p)) & (self.p < threshold), axis=0) < 2
-        return waveform(self.t, np.nanmean(self[good].normalize().p, axis=1))
+        if normalize:
+            WF_mean=waveform(self.t, np.nanmean(self[good].normalize().p, axis=1))
+        else:
+            WF_mean=waveform(self.t, np.nanmean(self[good].p, axis=1))
+        WF_mean.p.shape=[WF_mean.p.size, 1]
+        return WF_mean
 
     def  threshold_centroid(self, fraction=0.38):
         """
@@ -257,4 +262,13 @@ class waveform(object):
                 C[col] = np.sum(p[bins]*t[bins])/np.sum(p[bins])
         return C
 
-
+    def broaden(self, sigma):
+        if sigma==0:
+            return self
+        nK = np.minimum(np.floor(self.p.size/2)-1,3*np.ceil(sigma/self.dt))
+        tK = np.arange(-nK, nK+1)*self.dt
+        K = gaussian(tK, 0, sigma)
+        K /= np.sum(K)
+        self.p=np.convolve(self.p.ravel(), K,'same')
+        self.p.shape=[self.p.size,1]
+        return self
