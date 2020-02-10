@@ -186,3 +186,8 @@ def main():
     
 if __name__=='__main__':
     main()
+    
+    
+# note: these input arguments:
+    #/Volumes/ice2/ben/ATM_WF/AA_18/fits/2018.11.10/ILNSAW1B_20181110_181100.atm6DT7.h5_q4_out.h5 -s SRF_green_full.h5 -i TEP.h5 -w 40 --xy -511599.5 302234.5
+    
