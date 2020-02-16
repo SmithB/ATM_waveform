@@ -14,11 +14,12 @@ from ATL11 import RDE
 from argparse import ArgumentParser
 import matplotlib.pyplot as plt
 import scipy.integrate as sciint
-
+from scipy.interpolate import interp1d
+import os
 
 def interp_inv(fi, t0, f0):
-    ii_plus =np.min(np.flatnonzero(fi>=f0))
-    ii_minus=np.max(np.flatnonzero(fi<=f0))
+    ii_plus =np.min(np.flatnonzero(f0>=fi))
+    ii_minus=np.max(np.flatnonzero(f0<=fi))
     if f0[ii_plus]==f0[ii_minus]:
         return (t0[ii_plus]+t0[ii_minus])/2
     return t0[ii_minus]+(fi-f0[ii_minus])*(t0[ii_plus]-t0[ii_minus])/(f0[ii_plus]-f0[ii_minus])
@@ -43,6 +44,11 @@ def wf_med_bar(WF, T_win, t_tol=0.01):
     IPW=np.interp(np.array([tc-T_win/2, tc+T_win/2]), WF.t.ravel(), IP)
     # find the integrand value at the median
     t_med=interp_inv(np.mean(IPW), WF.t, IP)
+    #if plot:
+    #    plt.plot(WF.t, (IP-IPW[0])/(IPW[1]-IPW[0]))
+    #    plt.plot(t_med, (np.mean(IPW)-IPW[0])/(IPW[1]-IPW[0]),'*')
+    #    plt.gca().vlines([tc-T_win/2, tc+T_win/2], 0, 1)
+    
     return tc, t_med
 
 def make_composite_wf(k0s, catalog):
@@ -61,7 +67,7 @@ def composite_stats(WF, t_window):
     els=np.ones_like(WF.p, dtype=bool)
     ctr=WF.centroid()
     count=0
-    while np.abs(ctr-ctr_last) > 0.01 and count < 10:
+    while np.abs(ctr-ctr_last) > 0.001 and count < 100:
         sigma_r=WF.robust_spread(els=els)
         els=np.abs(WF.t-ctr) <= np.max([3*sigma_r, t_window/2])
         ctr_last=ctr
@@ -89,9 +95,9 @@ def my_lsfit(G, d):
     return m, R, sigma_hat
 
 def plane_fit_R(D, ind):
-    G=np.c_[np.ones(ind), D.x[ind].ravel(), D.y[ind].ravel()]
-    m, R, sigma_hat = my_lsfit(G, D.elevation)
-    return R, np.sqrt(np.sum(m[1:2]))
+    G=np.c_[np.ones(ind.size), D.x[ind].ravel()-D.x[ind].mean(), D.y[ind].ravel()-D.y[ind].mean()]
+    m, R, sigma_hat = my_lsfit(G, D.elevation[ind])
+    return R, np.sqrt(np.sum(m[1:2]**2))
 
 def setup(scat_file, impulse_file):
 
@@ -115,28 +121,47 @@ def setup(scat_file, impulse_file):
     catalog.update(make_rx_scat_catalog(TX, h5_file=scat_file))
     return catalog
 
-def make_composite_stats(k0_file, scat_file, impulse_file,  res=40, t_window=20):
-    k0_field_dict={'location':['latitude','longitude'],
+def make_composite_stats(k0_file, scat_file, impulse_file,  res=40, \
+                         t_window=20, dt_fine=0.05):
+    k0_field_dict={'location':['latitude','longitude', 'elevation'],
             'both':['K0']}
     catalog=setup(scat_file, impulse_file)
-    D_in=pc.data.from_file(k0_file, field_dict=k0_field_dict)
+    D_in=pc.data().from_h5(k0_file, field_dict=k0_field_dict)
+    D_in.get_xy(EPSG=3031)
+    # remove bogus points (lat=lon=0)
+    D_in.index(np.abs(D_in.x)>0)
+
     pt_dict=pc.bin_rows(np.c_[np.round(D_in.x/res)*res, np.round(D_in.y/res)*res])
     D_out=pc.data().from_dict(
         {field:np.zeros(len(pt_dict))+np.NaN for field in \
          ['t_ctr', 't_med','t_sigma', 't_sigma_r','N','x','y', 'z_sigma', 'z_slope_mag']})
+    
+    TX=resample_wf(catalog[0], dt_fine)
+    TX_mean, TX_med = composite_stats(TX, t_window)[0:2]
 
     for ii, ctr in enumerate(pt_dict):
         N=len(pt_dict[ctr])
         if N < 10:
             continue
-        WF0 = make_composite_wf(D_in.k0[pt_dict[ctr]], catalog)[0]
-        D_out.t_ctr[ii], D_out.t_med[ii], D_out.t_sigma[ii], D_out.t_sigma_r[ii]=composite_stats(WF0)
-        D_out.sigma_z[ii], D_out.z_slope_mag[ii] = plane_fit_R(D_in, pt_dict[ctr])
+        WF0 = make_composite_wf(D_in.K0[pt_dict[ctr]], catalog)[0]
+        WF0 = resample_wf(WF0, 0.05)
+        D_out.t_ctr[ii], D_out.t_med[ii], D_out.t_sigma[ii], D_out.t_sigma_r[ii]=composite_stats(WF0, t_window)
+        D_out.z_sigma[ii], D_out.z_slope_mag[ii] = plane_fit_R(D_in, pt_dict[ctr])
+        D_out.x[ii] = ctr[0]
+        D_out.y[ii] = ctr[1]
+        D_out.N[ii] = len(pt_dict[ctr])
+        
+    return D_out, TX_mean, TX_med
 
+def resample_wf(WF, dt):
+    ti=np.arange(WF.t[0], WF.t[-1]+dt, dt)
+    sz=[ti.size, 1]
+    fi=interp1d(WF.t.ravel(), WF.p.ravel(), kind='cubic', fill_value=0, bounds_error=False)
+    return waveform(ti.reshape(sz), fi(ti).reshape(sz))
 
 def make_plot(k0_file, scat_file, impulse_file,  xy0=None, res=40, t_window=20):
 
-    res_test(impulse_file)
+    #res_test(impulse_file)
 
     k0_field_dict={'location':['latitude','longitude'],
             'both':['K0']}
@@ -147,9 +172,9 @@ def make_plot(k0_file, scat_file, impulse_file,  xy0=None, res=40, t_window=20):
     xy_fits=np.concatenate([np.array(key).reshape([1,2]) for key in pt_dict], axis=0)
     best=np.argmin(np.abs((xy_fits[:,0]-xy0[0])+1j*(xy_fits[:,1]-xy0[1])))
     WF_composite, WFs=make_composite_wf(D_in.K0[pt_dict[tuple(xy_fits[best,:])]], catalog)
-
-    TX=catalog[0]
-
+    TX=resample_wf(catalog[0], 0.05)
+    WF_composite=resample_wf(WF_composite, 0.05)
+    
     bar0, med0, sigma0, sigmar_0=composite_stats(TX, t_window)
     barc, medc, sigmac, sigmar_c=composite_stats(WF_composite, t_window)
 
@@ -160,8 +185,9 @@ def make_plot(k0_file, scat_file, impulse_file,  xy0=None, res=40, t_window=20):
     z0 = TX.centroid()*-0.15
 
     for WF in WFs:
+        #WFi = resample_wf(WF, 0.01)
         plt.plot(WF.p, WF.t*-.15-z0, linewidth=0.5, color='gray')
-    plt.plot(catalog[0].p, catalog[0].t*-.15-z0, 'k', linewidth=2)
+    plt.plot(TX.p, TX.t*-.15-z0, 'k', linewidth=2)
     plt.plot(WF_composite.p.ravel(), WF_composite.t.ravel()*-.15-z0, 'b', linewidth=2)
     plt.gca().axhline(-bar0*.15-z0, color='k', linewidth=2)
     plt.gca().axhline(-barc*.15-z0, color='b', linewidth=2)
@@ -180,15 +206,22 @@ def res_test(impulse_file):
     med_vals=np.zeros_like(dt_vals)+np.NaN
     wctr_vals=np.zeros_like(dt_vals)+np.NaN
     wmed_vals=np.zeros_like(dt_vals)+np.NaN
+    sigma_vals=np.zeros_like(dt_vals)+np.NaN
     for ii, dt in enumerate(dt_vals):
         ti=np.arange(TX.t[0], TX.t[-1]+dt, dt)
         ti=ti.reshape([ti.size, 1])
-        TXi=waveform(ti, np.interp(ti, TX.t.ravel(), TX.p.ravel()).reshape(ti.shape))
-        ctr_vals[ii], med_vals[ii]=wf_med_bar(TXi, 20., t_tol=0.001)
+        #TXi=waveform(ti, np.interp(ti, TX.t.ravel(), TX.p.ravel()).reshape(ti.shape))
+        TXi=resample_wf(TX, dt)
+        ctr_vals[ii], med_vals[ii] = wf_med_bar(TXi, 20., t_tol=0.001)       
+        wctr_vals[ii], wmed_vals[ii], _, sigma_vals[ii] = composite_stats(TXi, 20)
+        plt.title(dt)
 
     plt.figure(11); plt.clf()
-    plt.semilogx(dt_vals, ctr_vals)
-    plt.semilogx(dt_vals, med_vals)
+    plt.semilogx(dt_vals, ctr_vals, marker='o', label='ctr from int')
+    plt.semilogx(dt_vals, med_vals, marker='x', label='med from int')
+    plt.semilogx(dt_vals, wctr_vals, marker='o', label='ctr from wf')
+    plt.semilogx(dt_vals, wmed_vals, marker='x', label='med from wf')
+    plt.legend()
 
 
 def main():
@@ -205,8 +238,21 @@ def main():
     if args.xy is not None:
         make_plot(args.fit_file, args.scat_file, args.impulse_file, xy0=args.xy,  res=args.width, t_window=args.t_window)
         return
-    D_out=make_composite_stats(args.fit_file, args.scat_file, args.impulse_file, res=args.width, t_window=args.t_window)
-    D_out.to_h5(args.out_file)
+    if args.out_file is not None:
+        out_file=args.out_file
+    else:
+        out_dir=os.path.join(os.path.dirname(args.fit_file), 'composite_wf')
+        if not os.path.isdir(out_dir):
+            print(f"making directory:{out_dir}")
+            os.mkdir(out_dir)
+        out_file=os.path.join(out_dir, os.path.basename(args.fit_file).replace('out.h5','out_composite_WF.h5'))
+        print(f"out_file is {out_file}")
+    D_out, TX_mean, TX_median = make_composite_stats(args.fit_file, args.scat_file, args.impulse_file, res=args.width, t_window=args.t_window)
+
+    D_out.to_h5(out_file)
+    with h5py.File(out_file,'r+') as h5f:
+        h5f.attrs['tx_mean']=TX_mean
+        h5f.attrs['tx_median']=TX_median
 
 if __name__=='__main__':
     main()

@@ -6,6 +6,8 @@ Created on Fri Dec 14 09:06:47 2018
 @author: ben
 """
 import numpy as np
+import scipy.integrate as sciint
+import matplotlib.pyplot as plt
 
 def gaussian(x, ctr, sigma):
     """
@@ -110,7 +112,8 @@ class waveform(object):
         Calculate the specified percentiles of a distribution,  optionally for the subset specified by "els"
         """
         if els is not None:
-            C=np.cumsum(self.p[els])
+            #C=np.cumsum(np.concatenate([[0],self.p[els][:-1].ravel()]))
+            C=sciint.cumtrapz(self.p[els].ravel(), self.t[els].ravel(), initial=0)
             return np.interp(P, C/C[-1], self.t[els])
         else:
             C=np.cumsum(self.p)
