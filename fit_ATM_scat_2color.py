@@ -139,8 +139,12 @@ def main(args):
         for ch in channels:
             ch_shots=shots[ch][these_shots]
             # make the return waveform structure
-            D=read_ATM_file(input_files[ch], shot0=ch_shots[0], nShots=ch_shots[-1]-ch_shots[0]+1)
-            
+            try:
+                D=read_ATM_file(input_files[ch], shot0=ch_shots[0], nShots=ch_shots[-1]-ch_shots[0]+1)
+            except Exception as e:
+                print(f"caught exception for channel {ch} for shots {ch_shots[0]} to {ch_shots[1]}:")
+                print(e)
+                continue
             # fit the transmit data for this channel and these pulses
             D['TX']=D['TX'][np.in1d(D['TX'].shots, ch_shots)]
             # set t0 to the center of the waveform
