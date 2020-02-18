@@ -64,7 +64,7 @@ def main(args):
         os.remove(args.output_file)
     # define the output datasets
     outDS={}
-    outDS['ch']=['R', 'A', 'B', 'delta_t', 't0','tc', 'noise_RMS','shot','Amax','seconds_of_day']
+    outDS['ch']=['R', 'A', 'B', 'delta_t', 't0','tc', 'noise_RMS','shot','Amax','seconds_of_day','nPeaks']
     outDS['both']=['R', 'K0', 'Kmin', 'Kmax', 'sigma']
     outDS['location']=['latitude', 'longitude', 'elevation']
     out_h5 = h5py.File(args.output_file,'w')
@@ -156,7 +156,7 @@ def main(args):
             #                            return_catalogs=True,  catalogs=catalog_buffers)
             D_out_TX = fit_catalogs({ch:D['TX']}, TX_library, sigmas, delta_ts, \
                                         t_tol=0.25, sigma_tol=0.25,  \
-                                        return_catalogs=False,  catalogs=TX_catalog_buffers)
+                                        return_catalogs=False,  catalogs=TX_catalog_buffers, params=outDS)
             N_out=len(D_out_TX[ch]['A'])
             for field in ['t0','A','R','shot']:
                 out_h5['/TX/%s/%s' % (ch, field)][outShot0:outShot0+N_out]=D_out_TX[ch][field].ravel()

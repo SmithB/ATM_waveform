@@ -231,6 +231,8 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                 fit_params[ch]['seconds_of_day']=WF[ch].seconds_of_day
                 #fit_params[ch][WF_count]['delta_t'] -= WF[ch].t0
                 fit_params['both']['shot'] = WF[ch].shots[0]
+                if 'nPeaks' in params['ch']:
+                    fit_params[ch]['nPeaks']=WF[ch].nPeaks
                 sigma_last = np.maximum(sigma_last, M[this_key]['sigma'])
             fit_params['both']['sigma']=M[this_key]['sigma']
             searched_k_vals = np.array(sorted(R_dict.keys()))
