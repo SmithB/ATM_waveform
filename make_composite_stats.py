@@ -189,11 +189,11 @@ def make_plot(k0_file, scat_file, impulse_file,  xy0=None, res=40, t_window=20):
         plt.plot(WF.p, WF.t*-.15-z0, linewidth=0.5, color='gray')
     plt.plot(TX.p, TX.t*-.15-z0, 'k', linewidth=2)
     plt.plot(WF_composite.p.ravel(), WF_composite.t.ravel()*-.15-z0, 'b', linewidth=2)
-    plt.gca().axhline(-bar0*.15-z0, color='k', linewidth=2)
-    plt.gca().axhline(-barc*.15-z0, color='b', linewidth=2)
-    plt.gca().axhline(-med0*.15-z0, linestyle='--', color='k', linewidth=2)
-    plt.gca().axhline(-medc*.15-z0, linestyle='--', color='b', linewidth=2)
-
+    plt.gca().axhline(-bar0*.15-z0, color='k', linewidth=2, label='TX mean')
+    plt.gca().axhline(-barc*.15-z0, color='b', linewidth=2, label='RX mean')
+    plt.gca().axhline(-med0*.15-z0, linestyle='--', color='k', linewidth=2, label='TX med')
+    plt.gca().axhline(-medc*.15-z0, linestyle='--', color='b', linewidth=2, label='RX med')
+    plt.legend()
     plt.xlabel('power')
     plt.ylabel('elevation WRT surface, m')
 
