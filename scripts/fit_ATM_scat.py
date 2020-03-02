@@ -40,12 +40,12 @@ def get_tx_est(filename, nShots=np.Inf, TX0=None, source='TX', pMin=50, skip_n_t
         # align the pulses on their 50% threshold
         for ii in range(TX1.size):
             TX1.p[:,ii]=np.interp(ti, TX1.t.ravel()-t50[ii], TX1.p[:,ii])
-        TXm=TX1.calcMean().subBG().normalize()
+        TXm=TX1.calc_mean().subBG().normalize()
         TXn=TX1[np.arange(0, TX1.size, dtype=int)].subBG().normalize()
         misfit=np.sqrt(np.nanmean((TXn.p-TXm.p)**2, axis=0))
 
         # calculate the mean of the WFs most similar to the mean
-        TX0 = TXn[misfit<2*np.median(misfit)].calcMean()
+        TX0 = TXn[misfit<2*np.median(misfit)].calc_mean()
         txC, txSigma=TX0.nSigmaMean()
         TX0.t=TX0.t-txC
         TX0.tc=0
