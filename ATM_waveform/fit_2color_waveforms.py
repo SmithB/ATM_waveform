@@ -212,6 +212,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
             for ch in channels:
                 M=Ms[ch]
                 M['best']={'key':this_kval, 'R':M[this_kval]['best']['R']}
+                # Store the best R values for each K0
                 for ki in [this_key for this_key in k_vals if [this_key] in M]:
                     if ki in R_dict:
                         R_dict[ki] += M[[ki]]['best']['R']/WF[ch].noise_RMS
