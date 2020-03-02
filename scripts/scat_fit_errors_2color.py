@@ -46,7 +46,7 @@ def plot_scat_fit_error(in_file, A_val=1, sigma_val=0, ax=None, line_color='r'):
     ax.loglog(xx[:,kk], xx[:,kk])
     ax.set_xlabel('$r_{eff}$ input, m')
     ax.set_ylabel('$r_{eff}$ recovered, m')
-    ax.set_title('A=%d, $\sigma$=%1.1f ns' % (A_val, sigma_val))
+    ax.set_title('A=%2.1f, $\sigma$=%1.1f ns' % (A_val, sigma_val))
     if not no_show:
         plt.show()
 
