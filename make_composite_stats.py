@@ -48,7 +48,7 @@ def wf_med_bar(WF, T_win, t_tol=0.01):
     #    plt.plot(WF.t, (IP-IPW[0])/(IPW[1]-IPW[0]))
     #    plt.plot(t_med, (np.mean(IPW)-IPW[0])/(IPW[1]-IPW[0]),'*')
     #    plt.gca().vlines([tc-T_win/2, tc+T_win/2], 0, 1)
-    
+
     return tc, t_med
 
 def make_composite_wf(k0s, catalog):
@@ -135,7 +135,7 @@ def make_composite_stats(k0_file, scat_file, impulse_file,  res=40, \
     D_out=pc.data().from_dict(
         {field:np.zeros(len(pt_dict))+np.NaN for field in \
          ['t_ctr', 't_med','t_sigma', 't_sigma_r','N','x','y', 'z_sigma', 'z_slope_mag']})
-    
+
     TX=resample_wf(catalog[0], dt_fine)
     TX_mean, TX_med = composite_stats(TX, t_window)[0:2]
 
@@ -150,7 +150,7 @@ def make_composite_stats(k0_file, scat_file, impulse_file,  res=40, \
         D_out.x[ii] = ctr[0]
         D_out.y[ii] = ctr[1]
         D_out.N[ii] = len(pt_dict[ctr])
-        
+
     return D_out, TX_mean, TX_med
 
 def resample_wf(WF, dt):
@@ -174,7 +174,7 @@ def make_plot(k0_file, scat_file, impulse_file,  xy0=None, res=40, t_window=20):
     WF_composite, WFs=make_composite_wf(D_in.K0[pt_dict[tuple(xy_fits[best,:])]], catalog)
     TX=resample_wf(catalog[0], 0.05)
     WF_composite=resample_wf(WF_composite, 0.05)
-    
+
     bar0, med0, sigma0, sigmar_0=composite_stats(TX, t_window)
     barc, medc, sigmac, sigmar_c=composite_stats(WF_composite, t_window)
 
@@ -196,6 +196,7 @@ def make_plot(k0_file, scat_file, impulse_file,  xy0=None, res=40, t_window=20):
     plt.legend()
     plt.xlabel('power')
     plt.ylabel('elevation WRT surface, m')
+    plt.show()
 
 def res_test(impulse_file):
 
@@ -212,7 +213,7 @@ def res_test(impulse_file):
         ti=ti.reshape([ti.size, 1])
         #TXi=waveform(ti, np.interp(ti, TX.t.ravel(), TX.p.ravel()).reshape(ti.shape))
         TXi=resample_wf(TX, dt)
-        ctr_vals[ii], med_vals[ii] = wf_med_bar(TXi, 20., t_tol=0.001)       
+        ctr_vals[ii], med_vals[ii] = wf_med_bar(TXi, 20., t_tol=0.001)
         wctr_vals[ii], wmed_vals[ii], _, sigma_vals[ii] = composite_stats(TXi, 20)
         plt.title(dt)
 
