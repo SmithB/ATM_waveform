@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 import fastkml
 import shapely.geometry as geo
 
-#thedir='/Volumes/ice2/ben/ATM_WF/RampPasses/fits/2017.12.04/'
-thedir='/Data/ATM_WF/RampPasses/fits/2017.12.04/'
+thedir='/Volumes/ice2/ben/ATM_WF/RampPasses/fits/2017.12.04/'
+#thedir='/Data/ATM_WF/RampPasses/fits/2017.12.04/'
 
 field_dict={'both':['K0'], 'location':['latitude','longitude','elevation'],'G':['nPeaks', 'R','shot','noise_RMS','A']}
 
@@ -61,9 +61,12 @@ for file in ['Airstrip_outer.kml', 'Grassy_1.kml', 'Grassy_2.kml' ]:
     K.from_string(doc)
     geoms[file.replace('.kml','')] =K._features[0]._features[0].geometry
 
-inside = [geo.Point(item[0], item[1]).within(geoms['Airstrip_outer']) for item in zip(D_filt.longitude, D_filt.latitude)]
+inside = [geo.Point(item[0], item[1]).within(geoms['Airstrip_outer']) for item in zip(D_filt.longitude-360, D_filt.latitude)]
 
-
+D_inside = D_filt[np.array(inside)]
+grassy_1 = [geo.Point(item[0], item[1]).within(geoms['Grassy_1']) for item in zip(D_inside.longitude-360, D_inside.latitude)]
+grassy_2 = [geo.Point(item[0], item[1]).within(geoms['Grassy_2']) for item in zip(D_inside.longitude-360, D_inside.latitude)]
+D_airstrip = D_inside[(np.array(grassy_1)==0) & (np.array(grassy_2)==0)]
 
 plt.figure(1);
 plt.clf()
@@ -73,7 +76,6 @@ plt.scatter(D_scat.x[ii], D_scat.y[ii], 2, c=np.log10(D_scat.K0[ii]), vmin=-4.5,
 hb=plt.colorbar()
 hb.set_label('log $r_{eff}$, m')
 
-
 plt.figure(2)
 plt.clf()
 ii=np.flatnonzero((D.K0==0)& good_dZ)
@@ -81,8 +83,6 @@ plt.plot(D.x[ii], D.y[ii],'k.', zorder=0)
 ii=np.flatnonzero((D.K0>0) & good_dZ)
 plt.scatter(D.x[ii], D.y[ii], c=np.log10(D.K0[ii]), vmin=-4.5, vmax=-3, zorder=1); hb=plt.colorbar()
 hb.set_label('log $r_{eff}$')
-
-
 
 plt.figure(3); plt.clf()
 plt.plot(D.shot_all, np.log10(D.K0),'.')
