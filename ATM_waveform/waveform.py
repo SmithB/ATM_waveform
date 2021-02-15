@@ -7,7 +7,7 @@ Created on Fri Dec 14 09:06:47 2018
 """
 import numpy as np
 import scipy.integrate as sciint
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 def gaussian(x, ctr, sigma):
     """

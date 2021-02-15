@@ -7,7 +7,7 @@ Created on Mon Nov  5 16:56:31 2018
 import numpy as np
 #from numpy.linalg import inv
 import sys
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 #import bisect
 from ATM_waveform.waveform import waveform
 from copy import deepcopy
@@ -273,6 +273,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                     fit_params[ch]['t_shift']=WF[ch].t_shift
 
             if KEY_SEARCH_PLOT:
+                import matplotlib.pyplot as plt
                 ch_keys={}
                 new_keys={}
                 fig=plt.gcf();
@@ -290,6 +291,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
             # report
             fit_param_list += [fit_params]
             if DOPLOT:
+                import matplotlib.pyplot as plt
                 plt.figure();
                 colors={'IR':'r','G':'g'}
                 this_title=''

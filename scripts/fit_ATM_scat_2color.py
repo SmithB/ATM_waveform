@@ -8,8 +8,10 @@ Created on Wed Nov 14 21:51:42 2018
 #  2 ./IR/ILNIRW1Bprelim_20181028_013800.atm6CT7.filt.h5 ./green/ILNSAW1Bprelim_20181028_013800.atm6DT7.filt.h5 20181028_013800_out.h5 -f SRF_IR_full.h5 SRF_green_full.h5 -T TX_IR.h5 TX_green.h5 -c IR G
 #  1 ./green/ILNSAW1Bprelim_20181028_013800.atm6DT7.filt.h5 20181028_013800_G_out.h5 -f SRF_green_full.h5 -T  TX_green.h5 -c G
 
+import os
+os.environ["MKL_NUM_THREADS"]="1"  # multiple threads don't help that much
 import numpy as np
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from ATM_waveform.read_ATM_wfs import read_ATM_file
 from ATM_waveform.fit_waveforms import listDict
 #from fit_waveforms import waveform
@@ -20,11 +22,11 @@ from ATM_waveform.waveform import waveform
 from time import time
 import argparse
 import h5py
-import os
+
 import sys
 
 np.seterr(invalid='ignore')
-os.environ["MKL_NUM_THREADS"]="1"  # multiple threads don't help that much
+
 
 def choose_shots(input_files, skip=None):
     # get the overlapping shots from the input files
