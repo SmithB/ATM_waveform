@@ -10,4 +10,4 @@ from .fit_waveforms import *
 from .waveform import *
 from .read_ATM_wfs import *
 from .corr_no_mean import *
-
+from .three_sigma_edit_fit import *
