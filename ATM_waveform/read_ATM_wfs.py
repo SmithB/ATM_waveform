@@ -59,9 +59,10 @@ def read_ATM_file(fname, getCountAndReturn=False, shot0=0, nShots=np.Inf, readTX
                     '/waveforms/twv/gate/pulse/count'):
             D_in[key]=np.array(h5f[key], dtype=int)
         # read in the gate info for the shots we want to read
-        for key in( '/waveforms/twv/shot/gate_start', '/waveforms/twv/shot/gate_count',  '/laser/gate_xmt', '/laser/gate_rcv', '/laser/calrng'):
+        for key in( '/waveforms/twv/shot/gate_start', '/waveforms/twv/shot/gate_count',  '/laser/gate_xmt', '/laser/gate_rcv'):
             D_in[key]=np.array(h5f[key][shot0:shotN], dtype=int)
-
+        # calrng is not an integer
+        D_in['/laser/calrng']=np.array(h5f['/laser/calrng'][shot0:shotN])
         #read in the geolocation and time
         try:
             for key in ('/footprint/latitude','/footprint/longitude','/footprint/elevation','/laser/scan_azimuth'):
@@ -69,6 +70,7 @@ def read_ATM_file(fname, getCountAndReturn=False, shot0=0, nShots=np.Inf, readTX
         except KeyError:
             pass
         D_in['/waveforms/twv/shot/seconds_of_day']=np.array(h5f['/waveforms/twv/shot/seconds_of_day'][shot0:shotN])
+        
         # read the sampling interval
         dt=np.float64(h5f['/waveforms/twv/ancillary_data/sample_interval'])
 
@@ -109,7 +111,7 @@ def read_ATM_file(fname, getCountAndReturn=False, shot0=0, nShots=np.Inf, readTX
             result={}
         result['calrng']=D_in['/laser/calrng']
         result['seconds_of_day']=D_in['/waveforms/twv/shot/seconds_of_day']
-        
+
         if readTX:
             TX=np.c_[TX].transpose()
             result['TX']=waveform(np.arange(TX.shape[0])*dt, TX, shots=shots, t0=tx_samp0*dt, seconds_of_day=D_in['/waveforms/twv/shot/seconds_of_day'])
@@ -119,7 +121,7 @@ def read_ATM_file(fname, getCountAndReturn=False, shot0=0, nShots=np.Inf, readTX
             RX=np.c_[RX].transpose()
             nPeaks=np.c_[nPeaks].ravel()
             result['RX']=waveform(np.arange(RX.shape[0])*dt, RX, shots=shots, nPeaks=nPeaks, t0=rx_samp0*dt, seconds_of_day=D_in['/waveforms/twv/shot/seconds_of_day'])
-            result['rx_samp0']=rx_samp0
+            result['rx_samp0']=np.array(rx_samp0)
             result['RX'].error_flag[np.abs(result['calrng']-(result['RX'].t0*.15-L_TX))>55] = 1
         result['shots']=shots
     return result
