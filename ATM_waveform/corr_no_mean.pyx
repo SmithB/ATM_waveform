@@ -11,6 +11,7 @@ cimport numpy as np
 import numpy as np
 cimport cython
 from math import pi
+from math import sqrt
 
 @cython.boundscheck(False)
 @cython.cdivision(True)
@@ -30,7 +31,10 @@ def corr_no_mean(np.ndarray[double, ndim=1] x, np.ndarray[double, ndim=1] y, np.
     cdef double sum_xy=0.
     cdef double sum_x2=0.
     cdef int count=0
-    cdef R=0.
+    cdef double R=0.
+    cdef double r=0.
+    cdef double A=0.
+
     for i in range(N-1, -1, -1):
         #if np.isfinite(x[i]) and np.isfinite(y[i]):
         #    mask[i]=1
@@ -43,6 +47,6 @@ def corr_no_mean(np.ndarray[double, ndim=1] x, np.ndarray[double, ndim=1] y, np.
         if mask[i]>0:
             r = (y[i]-A*x[i])
             R += r*r
-    R = np.sqrt(R/(count-2))
+    R = sqrt(R/(count-2))
     return A, R
 
