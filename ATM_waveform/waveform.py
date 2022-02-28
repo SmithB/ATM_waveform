@@ -16,7 +16,9 @@ def gaussian(x, ctr, sigma):
     return 1/(sigma*np.sqrt(2*np.pi))*np.exp(-(x-ctr)**2/2/sigma**2)
 
 class waveform(object):
-    __slots__=['p','t','t0', 'dt', 'tc', 't_shift', 'size', 'error_flag', 'nSamps', 'nPeaks','shots','params','noise_RMS', 'p_squared','FWHM','seconds_of_day']
+    __slots__=['p','t','t0', 'dt', 'tc', 't_shift', 'size', 'error_flag', \
+               'nSamps', 'nPeaks','shots','params','noise_RMS', 'p_squared',\
+                   'FWHM', 'seconds_of_day', 'mask']
     """
         Waveform class contains tools to work data that give power as a function of time
 
@@ -42,12 +44,13 @@ class waveform(object):
         self.dt=t[1]-t[0]
         self.p=p
         if p.ndim == 1:
-            self.p.shape=[p.size,1]
+            self.p=self.p.reshape((p.size,1), order='F')
         self.size=self.p.shape[1]
         self.nSamps=self.p.shape[0]
         self.params=dict()
         self.p_squared=p_squared
         self.error_flag = np.zeros(self.size, dtype=int)
+        #self.mask=None
         # turn keyword arguments into 1-d arrays of size (self.size,)
         kw_dict={'t0':t0, 'tc':tc, 'nPeaks':nPeaks,'shots':shots, 'noise_RMS':noise_RMS, 'seconds_of_day':seconds_of_day, 'FWHM': FWHM}
         for key, val in kw_dict.items():
@@ -81,8 +84,6 @@ class waveform(object):
                 else:
                     setattr(result, field, temp[[key]])
         return result
-        #return waveform(self.t, self.p[:,key], t0=self.t0[key], tc=self.tc[key], nPeaks=self.nPeaks[key], shots=self.shots[key],
-        #                noise_RMS=self.noise_RMS[key], FWHM=fwhm, seconds_of_day=self.seconds_of_day[key])
 
     def centroid(self, els=None, threshold=None):
         """
