@@ -235,47 +235,49 @@ def wf_misfit(delta_t, sigma, WF, catalog, M, key_top,  G=None, return_data_est=
         # check if the broadened but unshifted version of this key is in the catalog
         broadened_key=key_top+[sigma]
         if broadened_key in catalog:
-            broadened_p=catalog[broadened_key].p
+            parent_WF = catalog[broadened_key]
+            broadened_p = parent_WF.p
         else:
             # make a broadened version of the catalog WF
+            grandparent_wf = catalog[key_top]
             if sigma==0:
-                 broadened_p = catalog[key_top].p
+                 broadened_p = grandparent_wf.p
             else:
-                broadened_p = broaden_p( catalog[key_top], sigma)
-            catalog[broadened_key]=waveform(catalog[key_top].t, broadened_p, t0=catalog[key_top].t0, tc=catalog[key_top].tc)
+                broadened_p = broaden_p( grandparent_wf, sigma )
+                #grandparent_wf.params['children'] += sigma
+            parent_WF = waveform(parent_WF.t, broadened_p, t0=parent_WF.t0, tc=parent_WF.tc)
+            #parent_WF.params['children'] = set()
+            catalog[broadened_key] = parent_WF
         # check if the shifted version of the broadened waveform is in the catalog
-        if this_key not in catalog:
+        if this_key in catalog:
+        #if delta_t in parent_WF.params['children']:
+            this_entry=catalog[this_key]
+        else:
             # if not, make it.
             M[this_key]=listDict()
-            temp_p = np.interp(WF.t.ravel(), (catalog[key_top].t-catalog[key_top].tc+delta_t).ravel(), broadened_p.ravel(), left=np.NaN, right=np.NaN)
+            temp_p = np.interp(WF.t.ravel(), (parent_WF.t-parent_WF.tc+delta_t).ravel(), \
+                               broadened_p.ravel(), left=np.NaN, right=np.NaN)
 
             # Note that argmax on a binary array returns the first nonzero index (faster than where)
-            ii=np.argmax(temp_p>0.01*np.nanmax(temp_p))
+            ii=np.argmax(temp_p > 0.01*np.nanmax(temp_p))
             mask=np.ones_like(temp_p, dtype=bool)
             mask[0:ii-4] = False
-            catalog[this_key] = waveform(catalog[broadened_key].t, temp_p,
-                   tc=catalog[broadened_key].tc, t0=catalog[broadened_key].t0)
-            catalog[this_key].params['mask']=mask
-        this_entry=catalog[this_key]
+            this_entry = waveform(parent_WF.t, temp_p, tc=parent_WF.tc, t0=parent_WF.t0)
+            this_entry.params['mask']=mask
+            catalog[this_key] = this_entry
+            #parent_WF.params['children'].add(this_entry[-1])
         if fit_BG:
             # solve for the background and the amplitude
             R, m, Ginv, good = lin_fit_misfit(catalog[this_key].p, WF.p, G=G,\
                 Ginv=this_entry.params['Ginv'], good_old=this_entry.params['good'])
-            #catalog[this_key].params['Ginv']=Ginv
             this_entry.params['good']=good
             M[this_key] = {'K0':key_top[0], 'R':R, 'A':np.float64(m[0]), 'B':np.float64(m[1]), 'delta_t':delta_t, 'sigma':sigma}
         else:
             # solve for the amplitude only
             G=this_entry.p
-            #try:
-            #    ii=np.where(G>0.002*np.nanmax(G))[0][0]
-            #except IndexError:
-            #    print("The G>002 problem happened!")
             good=np.isfinite(G).ravel() & np.isfinite(WF.p).ravel() & this_entry.params['mask']
-            #good[0:np.maximum(0,ii-4)]=0
             if this_entry.p_squared is None:
                 this_entry.p_squared=this_entry.p**2
-            #R, m, good = amp_misfit(G, WF.p, els=good, x_squared=catalog[this_key].p_squared)
             m, R = corr_no_mean(G.ravel(), WF.p.ravel(), this_entry.p_squared.ravel(), good.astype(np.int32).ravel(), G.size)
             M[this_key] = {'K0':key_top[0], 'R':R, 'A':m, 'B':0., 'delta_t':delta_t, 'sigma':sigma}
         if return_data_est:
@@ -327,20 +329,25 @@ def broadened_misfit(delta_ts, sigma, WF, catalog, M, key_top,  t_tol=None, refi
         return M[this_key]['best']['R']
     else:
         M[this_key]=listDict()
+        parent_WF=catalog[key_top]
         if this_key not in catalog:
+        #if sigma not in parent_WF.params['children']:
+            parent_WF=catalog[key_top]
             # if we haven't already broadened the WF to sigma, try it now:
             if sigma==0:
-                catalog[this_key]=waveform(catalog[key_top].t, catalog[key_top].p, t0=catalog[key_top].t0, tc=catalog[key_top].tc)
+                catalog[this_key]=waveform(parent_WF.t, parent_WF.p, t0=parent_WF.t0, tc=parent_WF.tc)
             else:
                 #nK=np.minimum(np.floor(catalog[key_top].p.size/2)-1,3*np.ceil(sigma/WF.dt))
                 #tK=np.arange(-nK, nK+1)*WF.dt
                 #K=gaussian(tK, 0, sigma)
                 #K=K/np.sum(K)
                 try:
-                    catalog[this_key]=waveform(catalog[key_top].t, broaden_p(catalog[key_top], sigma))
+                    catalog[this_key]=waveform(parent_WF.t, broaden_p(parent_WF, sigma))
                     #catalog[this_key]=waveform(catalog[key_top].t, np.convolve(catalog[key_top].p.ravel(), K,'same'))
                 except ValueError:
                     print("Convolution failed")
+            #parent_WF.params['children'].add(sigma)
+            #catalog[this_key].params['children']=set()
         return fit_shifted(delta_ts, sigma, catalog, WF,  M, key_top, t_tol=t_tol, refine_parabolic=refine_parabolic)
 
 def fit_broadened(delta_ts, sigmas, WF, catalog,  M, key_top, sigma_tol=None, sigma_max=5., t_tol=None, sigma_last=None):
@@ -353,7 +360,7 @@ def fit_broadened(delta_ts, sigmas, WF, catalog,  M, key_top, sigma_tol=None, si
     sigma_step=2*sigma_tol
     FWHM2sigma=2.355
     if sigmas is None:
-        sigma_template=catalog[key_top].fwhm()[0]/FWHM2sigma
+        sigma_template = catalog[key_top].fwhm()[0]/FWHM2sigma
         sigma_WF=WF.fwhm()[0]/FWHM2sigma
         sigma0=sigma_step*np.ceil(np.sqrt(np.maximum(0,  sigma_WF**2-sigma_template**2))/sigma_step)
         dSigma=np.maximum(sigma_step, np.ceil(sigma0/4.))
@@ -408,7 +415,7 @@ def fit_catalog(WFs, catalog_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, r
     if sigma_tol is None:
         sigma_tol=0.25
     # make an empty output_dictionary
-    WFp_empty={f:np.NaN for f in ['K0','R','A','B','delta_t','sigma','t0','Kmin','Kmax','shot']}
+    WFp_empty={f:np.NaN for f in ['K0', 'K0_refined', 'R','A','B','delta_t','sigma','t0','Kmin','Kmax','shot']}
     if return_data_est:
         WFp_empty['wf_est']=np.zeros_like(WFs.t)+np.NaN
 
@@ -424,7 +431,8 @@ def fit_catalog(WFs, catalog_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, r
         if [kk] not in catalog:
             # make a copy of the current template
             temp=catalog_in[kk]
-            catalog[[kk]]=waveform(temp.t, temp.p, t0=temp.t0, tc=temp.tc)
+            catalog[[kk]]=waveform(temp.t, temp.p.ravel(), t0=temp.t0, tc=temp.tc)
+            #catalog[[kk]].params['children']=set()
 
     W_catalog=np.zeros(keys.shape)
     for ind, key in enumerate(keys):
@@ -478,6 +486,8 @@ def fit_catalog(WFs, catalog_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, r
             fit_params[WF_count]['shot'] = WF.shots[0]
             sigma_last=M[this_key]['sigma']
             R_max=fit_params[WF_count]['R']*(1.+1./np.sqrt(WF.t.size))
+            # default value for K0_ref
+            fit_params[WF_count]['K0_refined'] = M[this_key]['K0']
             if np.sum(searched_keys>0)>=3:
                 these=np.flatnonzero(searched_keys>0)
                 if len(these) > 3:
@@ -490,6 +500,13 @@ def fit_catalog(WFs, catalog_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, r
                 else:
                     fit_params[WF_count]['Kmin']=10**np.min(E_roots)
                     fit_params[WF_count]['Kmax']=10**np.max(E_roots)
+                # parabolic refinement of R:
+                ii = np.argmin(R) + np.array([-1, 0, 1], dtype=int)
+
+                if np.max(ii) < len(searched_keys):
+                    ki, ri = parabolic_search_refinement(searched_keys[ii], R[ii])
+                    fit_params[WF_count]['K0_refined'] = ki
+
             if (0. in searched_keys) and R[searched_keys==0]<R_max:
                 fit_params[WF_count]['Kmin']=0.
 
