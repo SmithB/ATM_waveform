@@ -24,6 +24,8 @@ with open("README.md", "r") as fh:
 def check_output(cmd):
     return subprocess.check_output(cmd).decode('utf')
 
+scripts = [os.path.join('scripts',f) for f in os.listdir('scripts')]
+
 setup(
     name='ATM_waveform',
     version='0.0.0.1',
@@ -44,5 +46,6 @@ setup(
     ],
     packages=find_packages(),
     ext_modules = cythonize("ATM_waveform/corr_no_mean.pyx"),
-    include_dirs=[numpy.get_include()]
+    include_dirs=[numpy.get_include()],
+    scripts=scripts
 )
