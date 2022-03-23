@@ -6,8 +6,9 @@ Created on Mon Jul 15 11:49:13 2019
 @author: ben
 """
 
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Extension
 from Cython.Build import cythonize
+import subprocess
 import logging
 import sys
 import numpy
@@ -23,6 +24,17 @@ with open("README.md", "r") as fh:
 # run cmd from the command line
 def check_output(cmd):
     return subprocess.check_output(cmd).decode('utf')
+
+extra_compile_args = ["-DNDEBUG", "-O3"]
+
+
+extensions=[Extension('ATM_waveform.'+module, sources=['ATM_waveform/'+module+'.pyx'], extra_compile_args=extra_compile_args) for module in \
+            ['corr_no_mean','unrefined_misfit','refined_misfit']]
+
+scripts = [os.path.join('scripts',f) for f in os.listdir('scripts') if not (f[0]=='.' or f[-1]=='~' or os.path.isdir(os.path.join('scripts', f)))]
+
+
+
 
 setup(
     name='ATM_waveform',
@@ -43,6 +55,7 @@ setup(
         'Programming Language :: Python :: 3.6',
     ],
     packages=find_packages(),
-    ext_modules = cythonize("ATM_waveform/corr_no_mean.pyx"),
-    include_dirs=[numpy.get_include()]
+    ext_modules = cythonize(extensions),
+    include_dirs=[numpy.get_include()],
+    scripts=scripts
 )
