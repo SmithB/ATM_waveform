@@ -5,7 +5,7 @@ Created on Wed Nov 14 21:51:42 2018
 
 @author: ben
 """
-#  2 ./IR/ILNIRW1Bprelim_20181028_013800.atm6CT7.filt.h5 ./green/ILNSAW1Bprelim_20181028_013800.atm6DT7.filt.h5 20181028_013800_out.h5 -f SRF_IR_full.h5 SRF_green_full.h5 -T TX_IR.h5 TX_green.h5 -c IR G
+#  2 ./IR/ILNIRW1B_20190906_132900.atm6CT7.h5 ./green/ILNSAW1B_20190906_132900.atm6DT7.h5 20190906_132900.out.h5 -f data/SRF_IR_full.h5 data/SRF_green_full.h5 -T TX_IR.h5 TX_green.h5 -c IR G
 #  1 ./green/ILNSAW1Bprelim_20181028_013800.atm6DT7.filt.h5 20181028_013800_G_out.h5 -f SRF_green_full.h5 -T  TX_green.h5 -c G
 
 import os
@@ -18,7 +18,7 @@ from ATM_waveform.fit_waveforms import listDict
 from ATM_waveform.make_rx_scat_catalog import make_rx_scat_catalog
 
 from ATM_waveform.fit_2color_waveforms import fit_catalogs
-from ATM_waveform.waveform import waveform
+from ATM_waveform import waveform, WFcatalog
 from time import time
 import argparse
 import h5py
@@ -66,7 +66,7 @@ def main(args):
         os.remove(args.output_file)
     # define the output datasets
     outDS={}
-    outDS['ch']=['R', 'A', 'B', 'delta_t', 't0','tc', 'noise_RMS','shot','Amax','seconds_of_day','nPeaks']
+    outDS['ch']=['R', 'A', 'B', 'delta_t', 't0','tc', 't_shift', 'noise_RMS','shot','Amax','seconds_of_day','nPeaks']
     outDS['both']=['R', 'K0', 'Kmin', 'Kmax', 'sigma']
     outDS['location']=['latitude', 'longitude', 'elevation']
     out_h5 = h5py.File(args.output_file,'w')
@@ -96,6 +96,8 @@ def main(args):
             TX[ch]=waveform(np.array(fh['/TX/t']), np.array(fh['/TX/p']) )
         TX[ch].t -= TX[ch].nSigmaMean()[0]
         TX[ch].tc = 0
+        TX[ch].p_squared=TX[ch].p*TX[ch].p
+        TX[ch].mask=np.isfinite(TX[ch].p)
         TX[ch].normalize()
     # write the transmit pulse to the file
     for ch in channels:
@@ -105,14 +107,14 @@ def main(args):
     # initialize the library of templates for the transmit waveforms
     TX_library={}
     for ind, ch in enumerate(channels):
-        TX_library[ch] = listDict()
+        TX_library[ch] ={}
         TX_library[ch].update({0.:TX[ch]})
 
     # initialize the library of templates for the received waveforms
     WF_library=dict()
     for ind, ch in enumerate(channels):
         WF_library[ch] = dict()
-        WF_library[ch].update({0.:TX[ch]})
+        #WF_library[ch].update({0.:TX[ch]})
         WF_library[ch].update(make_rx_scat_catalog(TX[ch], h5_file=args.scat_files[ind]))
 
 
@@ -122,8 +124,9 @@ def main(args):
     blocksize=1000
     start_vals=args.startShot+np.arange(0, nWFs, blocksize, dtype=int)
 
-    catalog_buffers={ch:listDict() for ch in channels}
-    TX_catalog_buffers={ch:listDict() for ch in channels}
+
+    catalog_buffers={ch:WFcatalog(TX[ch].nSamps, TX[ch].dt[0], t=TX[ch].t) for ch in channels}
+    TX_catalog_buffers={ch:WFcatalog(TX[ch].nSamps, TX[ch].dt[0], t=TX[ch].t) for ch in channels}
     time_old=time()
 
     sigmas=np.arange(0, 5, 0.25)
@@ -219,7 +222,7 @@ def main(args):
                 out_h5['RX/'+ch+'/p'][:, outShot0:outShot0+N_out] = wf_data[ch].p
                 out_h5['RX/'+ch+'/t_shift'][outShot0:outShot0+N_out] = D_out[ch]['t_shift'].ravel()
 
-        print("  shot=%d out of %d, N_keys=%d, dt=%5.1f" % (shot0+blocksize, start_vals[-1]+blocksize, len(catalog_buffers['G'].keys()), delta_time))
+        print("  shot=%d out of %d, N_keys=%d, dt=%5.1f" % (shot0+blocksize, start_vals[-1]+blocksize, len(catalog_buffers['G'].index.keys()), delta_time))
     print("   time to fit RX=%3.2f" % (time()-time_old))
 
     if args.waveforms:
@@ -248,3 +251,4 @@ if __name__=="__main__":
     parser.add_argument('--ch_names','-c', type=str, nargs=n_chan, default=['IR','G'])
     args=parser.parse_args()
     main(args)
+#2 IR/ILNIRW1B_20190906_132900.atm6CT7.h5 green/ILNSAW1B_20190906_132900.atm6DT7.h5 -o 20190906_132900.out.h5 -f data/SRF_IR_full.h5 data/SRF_green_full.h5 -T TX_IR.h5 TX_green.h5 -s 432544 -n 100 -c IR G
