@@ -25,7 +25,6 @@ with open("README.md", "r") as fh:
 def check_output(cmd):
     return subprocess.check_output(cmd).decode('utf')
 
-
 extra_compile_args = ["-DNDEBUG", "-O3"]
 
 
