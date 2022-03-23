@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-0
 """
 Created on Mon Nov  5 16:56:31 2018
 
@@ -8,35 +8,19 @@ import numpy as np
 #from numpy.linalg import inv
 import matplotlib.pyplot as plt
 #import bisect
-import sys
 from ATM_waveform.waveform import waveform
 #import
 #from ATM_waveform.corr_no_mean import corr_no_mean
-from ATM_waveform.corr_no_mean import corr_no_mean
-from time import time
+from ATM_waveform.unrefined_misfit import unrefined_misfit
+from ATM_waveform.refined_misfit import refined_misfit
+from ATM_waveform.WFcatalog import WFcatalog
+from ATM_waveform.golden_section_search import golden_section_search
+from ATM_waveform.parabolic_search_refinement import parabolic_search_refinement
+from ATM_waveform.wf_misfit import wf_misfit
+from ATM_waveform.make_broadened_WF import make_broadened_WF
+from ATM_waveform.broaden_p import broaden_p
 DOPLOT=False
 
-
-class listDict(dict):
-    """
-    Subclass of a dictionary, that can take lists as keys.  Any list key is converted
-    to a tuple, so it will be returned by the keys() method as a tuple.
-    """
-    def __setitem__(self, key, value):
-        if isinstance(key, list):
-            dict.__setitem__(self, tuple(key), value)
-        else:
-            dict.__setitem__(self, key, value)
-    def __getitem__(self, key):
-        if isinstance(key, list):
-            return dict.__getitem__(self, tuple(key))
-        else:
-            return dict.__getitem__(self, key)
-    def __contains__(self, key):
-        if isinstance(key, list):
-            return dict.__contains__(self, tuple(key))
-        else:
-            return dict.__contains__(self, key)
 
 def integer_shift(p, delta, fill_value=np.NaN):
     result = np.empty_like(p)
@@ -51,111 +35,6 @@ def integer_shift(p, delta, fill_value=np.NaN):
         result[:] = p
     return result
 
-def golden_section_search(f, x0, delta_x, bnds=[-np.Inf, np.Inf], integer_steps=False, tol=0.01, max_count=100, refine_parabolic=False, search_hist={}):
-    """
-    iterative search using the golden-section algorithm (more or less)
-
-    Search the points in x0 for the minimum value of f, then either broaden the
-    search range by delta_x, or refine the search spacing around the minumum x.
-    Repeat until the minimum interval between searched values falls below tol
-    If boundaries (bnds) are provided and the search strays outside them, refine
-    the spacing around the nearest boundary until the stopping criterion is reached
-    """
-    # phi is the golden ratio.
-    if integer_steps is False:
-        phi=(1+np.sqrt(5))/2
-    else:
-        phi=2
-    b=1.-1./phi
-    a=1./phi
-    # if x0 is not a list or an array, wrap it in a list so we can iterate
-    if not hasattr(x0,'__iter__'):
-        x0=[x0]
-    searched=np.array([])
-    R_dict=dict()
-    it_count=0
-    largest_gap=np.Inf
-    while (len(searched)==0) or (largest_gap > tol):
-        for x in x0:
-            R_dict[x]=f(x)
-            searched=np.union1d(searched, [x])
-        # make a list of R_vals searched
-        R_vals=np.array([R_dict[x] for x in searched])
-        # find the minimum of the R vals
-        try:
-            iR=np.argmin(R_vals)
-        except TypeError:
-            print("HERE!")
-        # choose the next search point.  If the searched picked the minimum or maximum of the
-        # time offsets, take a step  of delta_x to the left or right
-        if iR==0:
-            x0 = [searched[0] - delta_x]
-            if x0[0] < bnds[0]:
-                # if we're out of bounds, search between the minimum searched value and the left boundary
-                x0=[a*bnds[0]+b*np.min(searched[searched > bnds[0]])]
-                largest_gap=searched[1]-searched[0]
-            else:
-                largest_gap=np.Inf
-        elif iR==len(searched)-1:
-            x0 = [searched[-1] + delta_x ]
-            if x0[0] > bnds[1]:
-                x0=[a*bnds[1]+b*np.max(searched[searched < bnds[1]])]
-                largest_gap=searched[-1]-searched[-2]
-            else:
-                largest_gap=np.Inf
-        else:
-            # if the minimum was in the interior, find the largest gap in the x values
-            # around the minimum, and add a point using a golden-rule search
-            if searched[iR+1]-searched[iR] > searched[iR]-searched[iR-1]:
-                # the gap to the right of the minimum is largest: put the new point there
-                x0 = [ a*searched[iR] + b*searched[iR+1] ]
-                largest_gap=searched[iR+1]-searched[iR]
-            else:
-                # the gap to the left of the minimum is largest: put the new point there
-                x0 = [ a*searched[iR] + b*searched[iR-1] ]
-                largest_gap=searched[iR]-searched[iR-1]
-        if integer_steps is True:
-            if np.floor(x0) not in searched:
-                x0=np.floor(x0).astype(int)
-            elif np.ceil(x0) not in searched:
-                x0=np.ceil(x0).astype(int)
-            else:
-                break
-        # need to make delta_t a list so that it is iterable
-        it_count+=1
-        if it_count > max_count:
-            print("WARNING: too many shifts")
-            break
-    search_hist.update({'x':searched, 'R':R_vals})
-    if refine_parabolic and (len(searched) >= 3):
-        x_ref, R_ref = parabolic_search_refinement(searched, R_vals)
-        if (x_ref < bnds[0]) or (x_ref > bnds[1]):
-            return searched[iR], R_vals[iR]
-        else:
-            return x_ref, R_ref
-    else:
-        return searched[iR], R_vals[iR]
-
-def parabolic_search_refinement(x, R):
-    """
-    Fit a parabola to search results (x, R), return the refined values
-    """
-    ind=np.argsort(x)
-    xs=x[ind]
-    Rs=R[ind]
-    best=np.argmin(R)
-    if best==0:
-        p_ind=[0, 1, 2]
-    elif best==len(R)-1:
-        p_ind=np.array([-2, -1, 0])+best
-    else:
-        p_ind=best+np.array([-1, 0, 1])
-    G=np.c_[np.ones((3,1)), (xs[p_ind]-xs[p_ind[1]]), (xs[p_ind]-xs[p_ind[1]])**2]
-
-    m=np.linalg.solve(G, Rs[p_ind])
-    x_optimum= -m[1]/2/m[2]
-    R_opt= m[0]  + m[1]*x_optimum + m[2]*x_optimum**2
-    return x_optimum + xs[p_ind[1]], R_opt
 
 def gaussian(x, ctr, sigma):
     """
@@ -163,129 +42,32 @@ def gaussian(x, ctr, sigma):
     """
     return 1/(sigma*np.sqrt(2*np.pi))*np.exp(-(x-ctr)**2/2/sigma**2)
 
-def broaden_p(wf, sigma):
-    if sigma==0:
-        return wf.p
-    nK = np.minimum(np.floor(wf.p.size/2)-1,3*np.ceil(sigma/wf.dt))
-    tK = np.arange(-nK, nK+1)*wf.dt
-    K = gaussian(tK, 0, sigma)
-    K /= np.sum(K)
-    return np.convolve(wf.p.ravel(), K,'same')
 
-def amp_misfit(x, y, els=None, A=None, x_squared=None):
-    """
-    misfit for the best-fitting scaled template model.
-    """
-    if els is None:
-        ii=np.isfinite(x) & np.isfinite(y)
-    else:
-        ii=els
-    if A is None:
-        xi=x[ii]
-        yi=y[ii]
-        if x_squared is not None:
-            A = np.dot(xi, yi) / np.sum(x_squared[ii])
-        else:
-            A=np.dot(xi, yi)/np.dot(xi, xi)
-    r=yi-xi*A
-    #r=y[ii]-x[ii]*A
-    R=np.sqrt(np.sum((r**2)/(ii.sum()-2)))
-    return R, A, ii
 
-def lin_fit_misfit(x, y, G=None, m=None, Ginv=None, good_old=None):
-    """
-    Misfit for the the best-fitting background + scaled template model
-    """
-    if G is None:
-        G=np.ones((x.size, 2))
-    G[:,0]=x.ravel()
-    good=np.isfinite(G[:,0]) & np.isfinite(y.ravel())
-    if good_old is not None and Ginv is not None and np.all(good_old==good):
-        # use the previously calculated version of Ginv
-        m=Ginv.dot(y[good])
-        R=R=np.sqrt(np.sum((y[good]-G[good,:].dot(m))**2.)/(good.sum()-2))
-    else:
-        # need at least three good values to calculate a misfit
-        if good.sum() < 3:
-            m=np.zeros(2)
-            R=np.sqrt(np.sum(y**2)/(y.size-2))
-            return R, m
-        G1=G[good,:]
-        try:
-            #m=np.linalg.solve(G1.transpose().dot(G1), G1.transpose().dot(y[good]))
-            Ginv=np.linalg.solve(G1.transpose().dot(G1), G1.transpose())
-            m=Ginv.dot(y[good])
-            R=np.sqrt(np.sum((y[good]-G1.dot(m))**2.)/(good.sum()-2))
-            #R=np.sqrt(m_all[1][0])
-        except np.linalg.LinAlgError:
-            m=np.zeros(2)
-            R=np.sqrt(np.sum(y**2.)/(y.size-2))
-    return R, m, Ginv, good
 
-def wf_misfit(delta_t, sigma, WF, catalog, M, key_top,  G=None, return_data_est=False, fit_BG=False):
+def wf_unrefined_misfit(delta_ind, sigma, WF, M, K0_top,  parent_WF=None):
     """
         Find the misfit between a scaled and shifted template and a waveform
     """
-    if G is None and fit_BG:
-        G=np.ones((WF.p.size, 2))
-    this_key=key_top+[sigma]+[delta_t]
-    if (this_key in M) and (return_data_est is False):
+    delta_t=delta_ind*WF.dt[0]
+    this_key = (K0_top, sigma, delta_t)
+    if (this_key in M):
         return M[this_key]['R']
     else:
-        # check if the broadened but unshifted version of this key is in the catalog
-        broadened_key=key_top+[sigma]
-        if broadened_key in catalog:
-            parent_WF = catalog[broadened_key]
-            broadened_p = parent_WF.p
-        else:
-            # make a broadened version of the catalog WF
-            grandparent_wf = catalog[key_top]
-            if sigma==0:
-                 broadened_p = grandparent_wf.p
-            else:
-                broadened_p = broaden_p( grandparent_wf, sigma )
-                #grandparent_wf.params['children'] += sigma
-            parent_WF = waveform(parent_WF.t, broadened_p, t0=parent_WF.t0, tc=parent_WF.tc)
-            #parent_WF.params['children'] = set()
-            catalog[broadened_key] = parent_WF
+        broadened_p = parent_WF.p.copy()
+        broadened_p2 = parent_WF.p_squared.copy()
+
         # check if the shifted version of the broadened waveform is in the catalog
-        if this_key in catalog:
-        #if delta_t in parent_WF.params['children']:
-            this_entry=catalog[this_key]
-        else:
-            # if not, make it.
-            M[this_key]=listDict()
-            temp_p = np.interp(WF.t.ravel(), (parent_WF.t-parent_WF.tc+delta_t).ravel(), \
-                               broadened_p.ravel(), left=np.NaN, right=np.NaN)
+        R = unrefined_misfit(int(delta_ind), broadened_p.ravel(), WF.p.ravel(),
+                             broadened_p2.ravel(), WF.p_squared.ravel(),
+                             parent_WF.mask.ravel(), WF.mask.ravel(),
+                             len(broadened_p))
+        M[this_key] = {'K0':K0_top, 'R':R, 'A':None, 'B':0., 'delta_t':delta_t, 'sigma':sigma}
+    return R
 
-            # Note that argmax on a binary array returns the first nonzero index (faster than where)
-            ii=np.argmax(temp_p > 0.01*np.nanmax(temp_p))
-            mask=np.ones_like(temp_p, dtype=bool)
-            mask[0:ii-4] = False
-            this_entry = waveform(parent_WF.t, temp_p, tc=parent_WF.tc, t0=parent_WF.t0)
-            this_entry.params['mask']=mask
-            catalog[this_key] = this_entry
-            #parent_WF.params['children'].add(this_entry[-1])
-        if fit_BG:
-            # solve for the background and the amplitude
-            R, m, Ginv, good = lin_fit_misfit(catalog[this_key].p, WF.p, G=G,\
-                Ginv=this_entry.params['Ginv'], good_old=this_entry.params['good'])
-            this_entry.params['good']=good
-            M[this_key] = {'K0':key_top[0], 'R':R, 'A':np.float64(m[0]), 'B':np.float64(m[1]), 'delta_t':delta_t, 'sigma':sigma}
-        else:
-            # solve for the amplitude only
-            G=this_entry.p
-            good=np.isfinite(G).ravel() & np.isfinite(WF.p).ravel() & this_entry.params['mask']
-            if this_entry.p_squared is None:
-                this_entry.p_squared=this_entry.p**2
-            m, R = corr_no_mean(G.ravel(), WF.p.ravel(), this_entry.p_squared.ravel(), good.astype(np.int32).ravel(), G.size)
-            M[this_key] = {'K0':key_top[0], 'R':R, 'A':m, 'B':0., 'delta_t':delta_t, 'sigma':sigma}
-        if return_data_est:
-            return R, G.dot(m)
-        else:
-            return R
 
-def fit_shifted(delta_t_list, sigma, catalog, WF, M, key_top,  t_tol=None, refine_parabolic=True):
+def fit_shifted(delta_t_list, sigma, catalog, WF, M, K0_top, WF_top,
+                t_tol=None, broadened_WF=None):
     """
     Find the shift value that minimizes the misfit between a template and a waveform
 
@@ -296,92 +78,156 @@ def fit_shifted(delta_t_list, sigma, catalog, WF, M, key_top,  t_tol=None, refin
         t_tol=WF['t_samp']/10.
     delta_t_spacing=delta_t_list[1]-delta_t_list[0]
     bnds=[np.min(delta_t_list)-5, np.max(delta_t_list)+5]
-    fDelta = lambda deltaTval: wf_misfit(deltaTval, sigma, WF, catalog, M,  key_top)
-    if key_top in M and 'best' in M[key_top]:
-        this_delta_t_list = delta_t_list[np.argsort(np.abs(delta_t_list-M[key_top]['best']['delta_t']))[0:2]]
+    if broadened_WF is None:
+        broadened_WF = make_broadened_WF(sigma, K0_top, WF_top, catalog)
+
+    dt=WF_top.dt
+    if not isinstance(dt, (int, float)):
+        dt=dt[0]
+    #fDelta = lambda deltaTval: wf_misfit(deltaTval, sigma, WF, catalog, M,  K0_top, WF_top, parent_WF=broadened_WF)
+    # if a 'best' value has been found for this K0_top, (because a different sigma has been searched already)
+    # search the delta-t values around it
+    if (K0_top,) in M and 'best' in M[(K0_top,)]:
+        this_delta_t_list = delta_t_list[np.argsort(np.abs(delta_t_list-M[(K0_top,)]['best']['delta_t']))[0:2]]
         this_delta_t_list = np.concatenate([this_delta_t_list, [this_delta_t_list.mean()]])
     else:
         this_delta_t_list=delta_t_list
-    #K_last=list(M.keys())
-    delta_t_best, R_best = golden_section_search(fDelta, this_delta_t_list, delta_t_spacing, bnds=bnds, tol=t_tol, max_count=100, refine_parabolic=refine_parabolic)
-    #K_new=[kk for kk in M.keys() if (kk not in K_last)]
-    this_key=key_top+[sigma]+[delta_t_best]
-    if this_key not in M:
-        # make temporary catalog with only this entry and the top entry (b/c this entry won't get reused)
-        temp_catalog=listDict()
-        temp_catalog[key_top] = catalog[key_top]
-        temp_catalog[key_top+[sigma]] = catalog[key_top+[sigma]]
-        R_best = wf_misfit(delta_t_best, sigma, WF, temp_catalog, M,  key_top)
-    #M[this_key]={'key':this_key, 'R':R_best, 'sigma':sigma, 'delta_t':delta_t_best}
-    M[key_top+[sigma]]['best'] = {'key':this_key, 'R':R_best, 'delta_t':delta_t_best}
-    if 'best' not in M[key_top]:
-        M[key_top]['best'] = {'key':this_key, 'R':R_best, 'delta_t':delta_t_best}
-    elif R_best < M[key_top]['best']['R']:
-        M[key_top]['best'] = {'key':this_key, 'R':R_best, 'delta_t':delta_t_best}
-    return R_best
 
-def broadened_misfit(delta_ts, sigma, WF, catalog, M, key_top,  t_tol=None, refine_parabolic=True):
+    delta_ind_list = np.unique(np.round(this_delta_t_list/dt).astype(int))
+    ind_bnds = [bnds[0]/dt, bnds[1]/dt]
+
+    # this is the index shift for which the time-zero values for the two waveforms
+    # line up.
+    delta_ind_ctr = ((WF.t[0] -( broadened_WF.t[0]))/dt)[0]
+
+    #(np.round((WF.t[0]-broadened_WF.t[0])/WF.dt[0]))
+
+    f_ind = lambda ind: wf_unrefined_misfit(int(ind-delta_ind_ctr), sigma, WF, M, K0_top, parent_WF=broadened_WF)
+
+    golden_search_hist={}
+    delta_ind_best, R_best = golden_section_search(f_ind, delta_ind_list,
+                            delta_t_spacing/dt, bnds=ind_bnds, tol=1,
+                            integer_steps=True, max_count=100,
+                            search_hist=golden_search_hist,
+                            refine_parabolic=False)
+
+    # select a range of delta values to search for an optimal shift
+    refine_search_ind = np.arange(delta_ind_list[0], delta_ind_list[-1]+1)
+    refine_search_ind = refine_search_ind[np.argsort(np.abs(refine_search_ind-.01))].astype(int)
+    for this_ind in delta_ind_best + refine_search_ind:
+        delta_ind_refined, A, R = refined_misfit(this_ind-delta_ind_ctr, broadened_WF.p.ravel(), WF.p.ravel(),\
+                                                broadened_WF.p_squared.ravel(), WF.p_squared.ravel(),
+                                                broadened_WF.mask.ravel(),
+                                                WF.mask.ravel(), len(WF.p))
+        if delta_ind_refined >= 0 and delta_ind_refined <=1:
+            break
+
+    delta_t_best = -dt*this_ind
+    delta_t_refined= -dt*(this_ind + delta_ind_refined)
+
+    this_key=(K0_top, sigma, delta_t_best)
+    M[this_key] = {'key':this_key,'sigma':sigma, 'K0':K0_top, 'R':R, 'A':A,
+                   'delta_t':delta_t_refined}
+    M[ (K0_top, sigma) ]['best'] = {'key':this_key, 'R':R, 'A':A,
+                                    'delta_t':delta_t_refined}
+    if False:
+        plt.plot(WF.t, WF.p, '.'); plt.plot(broadened_WF.t+delta_t_refined, A*broadened_WF.p)
+        # N.B. : this works much better:
+        #plt.plot(WF.t-WF.t0, WF.p, '.'); plt.plot(broadened_WF.t-delta_t_best - (1+delta_ind_refined)*catalog.dt, A*broadened_WF.p)
+    if 'best' not in M[(K0_top,)]:
+        M[(K0_top,)]['best'] = {'key':this_key, 'R':R, 'delta_t':delta_t_refined}
+    elif R < M[(K0_top,)]['best']['R']:
+        M[(K0_top,)]['best'] = {'key':this_key, 'R':R, 'A':A, 'delta_t':delta_t_refined}
+    return R
+
+
+
+def broadened_misfit(delta_ts, sigma, WF, catalog, M, K0_top, WF_top,  t_tol=None, refine_parabolic=True,
+                     update_catalog=True):
     """
     Calculate the misfit between a broadened template and a waveform (searching over a range of shifts)
     """
-    this_key=key_top+[sigma]
+    this_key=(K0_top, sigma)
     if (this_key in M) and ('best' in M[this_key]):
         return M[this_key]['best']['R']
     else:
-        M[this_key]=listDict()
-        parent_WF=catalog[key_top]
-        if this_key not in catalog:
-        #if sigma not in parent_WF.params['children']:
-            parent_WF=catalog[key_top]
-            # if we haven't already broadened the WF to sigma, try it now:
-            if sigma==0:
-                catalog[this_key]=waveform(parent_WF.t, parent_WF.p, t0=parent_WF.t0, tc=parent_WF.tc)
-            else:
-                #nK=np.minimum(np.floor(catalog[key_top].p.size/2)-1,3*np.ceil(sigma/WF.dt))
-                #tK=np.arange(-nK, nK+1)*WF.dt
-                #K=gaussian(tK, 0, sigma)
-                #K=K/np.sum(K)
-                try:
-                    catalog[this_key]=waveform(parent_WF.t, broaden_p(parent_WF, sigma))
-                    #catalog[this_key]=waveform(catalog[key_top].t, np.convolve(catalog[key_top].p.ravel(), K,'same'))
-                except ValueError:
-                    print("Convolution failed")
-            #parent_WF.params['children'].add(sigma)
-            #catalog[this_key].params['children']=set()
-        return fit_shifted(delta_ts, sigma, catalog, WF,  M, key_top, t_tol=t_tol, refine_parabolic=refine_parabolic)
+        M[this_key]={}
+        if this_key in catalog:
+            broadened_WF= catalog[this_key]
+        else:
+            parent_WF=WF_top
+            # if we haven't already broadened the WF by sigma, try it now:
 
-def fit_broadened(delta_ts, sigmas, WF, catalog,  M, key_top, sigma_tol=None, sigma_max=5., t_tol=None, sigma_last=None):
+            if sigma==0:
+                this_p=parent_WF.p
+            else:
+                this_p = broaden_p(parent_WF, sigma)
+            if update_catalog:
+                catalog.update(this_key, p=this_p, p_squared=this_p*this_p,
+                               mask=np.isfinite(this_p).astype(np.int32),\
+                                   t0=parent_WF.t0, tc=parent_WF.tc)
+                broadened_WF = catalog[this_key]
+            else:
+                broadened_WF = waveform(parent_WF.t, this_p, p_squared=this_p*this_p, t0=parent_WF.t0, tc=parent_WF.tc)
+                broadened_WF.mask = np.isfinite(this_p).astype(np.int32)
+
+        return fit_shifted(delta_ts, sigma, catalog, WF,  M, K0_top, WF_top, t_tol=t_tol, broadened_WF=broadened_WF)
+
+def fit_broadened(delta_ts, sigmas, WF, catalog,  M, K0_top, WF_top,
+                  sigma_tol=None, sigma_max=5., t_tol=None, sigma_last=None):
     """
     Find the best broadening value that minimizes the misfit between a template and a waveform
     """
-    if key_top not in M:
-        M[key_top]=listDict()
-    fSigma = lambda sigma:broadened_misfit(delta_ts, sigma, WF, catalog, M, key_top, t_tol=t_tol)
+    if (K0_top,) not in M:
+        M[(K0_top,)]={}
+    fSigma = lambda sigma:broadened_misfit(delta_ts, sigma, WF, catalog, M, K0_top, WF_top, t_tol=t_tol)
     sigma_step=2*sigma_tol
     FWHM2sigma=2.355
-    if sigmas is None:
-        sigma_template = catalog[key_top].fwhm()[0]/FWHM2sigma
-        sigma_WF=WF.fwhm()[0]/FWHM2sigma
-        sigma0=sigma_step*np.ceil(np.sqrt(np.maximum(0,  sigma_WF**2-sigma_template**2))/sigma_step)
-        dSigma=np.maximum(sigma_step, np.ceil(sigma0/4.))
-        sigmas=np.array([0., np.maximum(sigma_step, sigma0-dSigma), np.maximum(sigma_step, sigma0+dSigma)])
-    else:
-        dSigma=np.max(sigmas)[0]/4.
-    if np.any(~np.isfinite(sigmas)):
-        print("NaN in sigma for %d " % WF.shots)
+
     if sigma_tol is None:
         sigma_tol=.125
+
+    if sigmas is None:
+        try:
+            sigma_template = WF_top.fwhm()[0]/FWHM2sigma
+        except Exception as e:
+            sigma_template = WF_top.fwhm()[0]/FWHM2sigma
+            print(e)
+        sigma_WF=WF.fwhm()[0]/FWHM2sigma
+
+        broadening = sigma_WF**2-sigma_template**2
+        if broadening < -sigma_tol**2:
+            sigma0 = 0
+            dSigma=sigma_tol/2
+            sigmas=np.array([0, dSigma])
+        else:
+            sigma0=sigma_step*np.ceil(np.sqrt(np.maximum(0,  broadening))/sigma_step)
+            dSigma=sigma_step*np.maximum(1, np.ceil(sigma0/sigma_step))
+            sigmas=np.array([0., np.maximum(sigma_step, sigma0-dSigma), np.maximum(sigma_step, sigma0+dSigma)])
+    else:
+        dSigma=np.max(sigmas)/4.
+    if np.any(~np.isfinite(sigmas)):
+        print("NaN in sigma for %d " % WF.shots)
+
+
     if sigma_last is not None:
         i1=np.maximum(1, np.argmin(np.abs(sigmas-sigma_last)))
     else:
         i1=1
     sigma_list=[sigmas[0], sigmas[i1]]
-    sigma_best, R_best = golden_section_search(fSigma, sigma_list, dSigma, bnds=[0, sigma_max], tol=sigma_tol, max_count=20)
-    this_key=key_top+[sigma_best]
-    M[key_top]['best']={'key':this_key,'R':R_best}
+    # search over sigma values:
+    search_hist={}
+    sigma_best, R_best = golden_section_search(fSigma, sigma_list, dSigma,
+                                               bnds=[0, sigma_max], tol=sigma_tol,
+                                               max_count=20, search_hist=search_hist)
+    #if broadening < -sigma_tol**2  and sigma_best > 0:
+    #    print("broadening is less than zero but sigma_best is greater than zero")
+    this_key=(K0_top, sigma_best)
+    M[(K0_top,)]['best']={'key':this_key,'R':R_best}
     return R_best
 
-def fit_catalog(WFs, catalog_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, return_data_est=False, return_catalog=False, catalog=None):
+def fit_catalog(WFs, catalog_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
+                return_data_est=False, return_catalog=False, catalog=None):
     """
     Search a library of waveforms for the best match between the broadened, shifted library waveform
     and the target waveforms
@@ -411,9 +257,9 @@ def fit_catalog(WFs, catalog_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, r
     """
     # set a sensible tolerance for delta_t if none is specified
     if t_tol is None:
-        t_tol=WFs.dt*0.1
+        t_tol = WFs.dt*0.1
     if sigma_tol is None:
-        sigma_tol=0.25
+        sigma_tol = 0.25
     # make an empty output_dictionary
     WFp_empty={f:np.NaN for f in ['K0', 'K0_refined', 'R','A','B','delta_t','sigma','t0','Kmin','Kmax','shot']}
     if return_data_est:
@@ -421,60 +267,63 @@ def fit_catalog(WFs, catalog_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, r
 
     # make an empty container where we will keep waveforms we've tried already
     if catalog is None:
-        catalog=listDict()
-    keys=np.sort(list(catalog_in))
+        catalog=WFcatalog(WFs.nSamps, WFs.dt[0], t=catalog_in[0].t)
+    input_K0 = [ kk for kk in np.sort(list(catalog_in)) ]
+
+    W_catalog=np.zeros(len(input_K0))
+    for ind, key in enumerate(input_K0):
+        W_catalog[ind]=catalog_in[key].fwhm()[0]
 
     # loop over the library of templates
-    for ii, kk in enumerate(keys):
+    for ii, kk in enumerate(input_K0):
         # check if we've searched this template before, otherwise copy it into
         # the library of checked templates
-        if [kk] not in catalog:
+        if (kk,) not in catalog:
             # make a copy of the current template
             temp=catalog_in[kk]
-            catalog[[kk]]=waveform(temp.t, temp.p.ravel(), t0=temp.t0, tc=temp.tc)
-            #catalog[[kk]].params['children']=set()
-
-    W_catalog=np.zeros(keys.shape)
-    for ind, key in enumerate(keys):
-        W_catalog[ind]=catalog_in[key].fwhm()[0]
+            catalog.update((kk,), p=temp.p, p_squared=temp.p*temp.p, mask=np.isfinite(temp.mask).astype(np.int32), t0=temp.t0, tc=temp.tc)
 
     fit_params=[WFp_empty.copy() for ii in range(WFs.size)]
     sigma_last=None
     t_center=WFs.t.mean()
     # loop over input waveforms
     for WF_count in range(WFs.size):
+        # this extracts the WF from the data, returns a waveform with t0=0
         WF=WFs[WF_count]
         if WF.nPeaks > 1:
             continue
         # shift the waveform to put its tc at the center of the time vector
         delta_samp=np.round((WF.tc-t_center)/WF.dt)
         WF.p=integer_shift(WF.p, -delta_samp)
-        WF.t0=-delta_samp*WF.dt
-
+        WF.p_squared=WF.p**2
+        WF.t0=-delta_samp*WF.dt  # this is '+' in fit_2color_waveforms
+        WF.mask=np.isfinite(WF.p).astype(np.int32)
         # set up a matching dictionary (contains keys of waveforms and their misfits)
-        M=listDict()
+        M={}
         # this is the bulk of the work, and it's where problems happen.  Wrap it in a try:
         # and write out errors to be examined later
         if True:
-            if len(keys)>1:
-                 # Search over input keys to find the best misfit between this template and the waveform
-                fB=lambda ind: fit_broadened(delta_ts, None,  WF, catalog, M, [keys[ind]], sigma_tol=sigma_tol, t_tol=t_tol, sigma_last=sigma_last)
+            if len(input_K0)>1:
+                # Search over input keys to find the best misfit between this template and the waveform
+                fB=lambda ind: fit_broadened(delta_ts, None,  WF, catalog, M, input_K0[ind], catalog[(input_K0[ind],)],
+                                             sigma_tol=sigma_tol, t_tol=t_tol, sigma_last=sigma_last)
                 W_match_ind=np.flatnonzero(W_catalog >= WF.fwhm()[0])
                 if len(W_match_ind) >0:
                     ind=np.array(tuple(set([0, W_match_ind[0]-2,  W_match_ind[0]+2])))
-                    ind=ind[(ind >= 0) & (ind<len(keys))]
+                    ind=ind[(ind >= 0) & (ind<len(input_K0))]
                 else:
                     ind=[2, 4]
-                iBest, Rbest = golden_section_search(fB, ind, delta_x=2, bnds=[0, len(keys)-1], integer_steps=True, tol=1)
+                # search over K0 in integer steps
+                iBest, Rbest = golden_section_search(fB, ind, delta_x=2, bnds=[0, len(input_K0)-1], integer_steps=True, tol=1)
                 iBest=int(iBest)
             else:
                 # only one key in input, return its misfit
-                Rbest=fit_broadened(delta_ts, None, WF, catalog, M, [keys[0]], sigma_tol=sigma_tol, t_tol=t_tol, sigma_last=sigma_last)
+                Rbest=fit_broadened(delta_ts, None, WF, catalog, M, input_K0, sigma_tol=sigma_tol, t_tol=t_tol, sigma_last=sigma_last)
                 iBest=0
-            this_key=[keys[iBest]]
+            this_key= (input_K0[iBest],)
             M['best']={'key':this_key, 'R':Rbest}
-            searched_keys = np.array([this_key for this_key in keys if [this_key] in M])
-            R=np.array([M[[ki]]['best']['R'] for ki in searched_keys])
+            searched_keys = np.array([this_key for this_key in input_K0 if (this_key,) in M])
+            R=np.array([M[(ki,)]['best']['R'] for ki in searched_keys])
 
             # recursively traverse the M dict for the best match.  The lowest-level match
             # will not have a 'best' entry
@@ -496,7 +345,10 @@ def fit_catalog(WFs, catalog_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, r
                 E_roots=np.polynomial.polynomial.Polynomial.fit(np.log10(searched_keys[these]), R[these]-R_max, 2).roots()
                 if np.any(np.imag(E_roots)!=0):
                     fit_params[WF_count]['Kmax']=10**np.minimum(3,np.polynomial.polynomial.Polynomial.fit(np.log10(searched_keys[these]), R[these]-R_max, 1).roots()[0])
-                    fit_params[WF_count]['Kmin']=np.min(searched_keys[R<R_max])
+                    try:
+                        fit_params[WF_count]['Kmin']=np.min(searched_keys[R<R_max])
+                    except Exception:
+                        pass
                 else:
                     fit_params[WF_count]['Kmin']=10**np.min(E_roots)
                     fit_params[WF_count]['Kmax']=10**np.max(E_roots)
@@ -510,9 +362,12 @@ def fit_catalog(WFs, catalog_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, r
             if (0. in searched_keys) and R[searched_keys==0]<R_max:
                 fit_params[WF_count]['Kmin']=0.
 
+            if False:
+
+                this=catalog[(fit_params[WF_count]['K0'],)];p1=broaden_p(this, M[this_key]['sigma']);plt.plot(WF.t+WF.t0, WF.p); plt.plot(this.t-fit_params[WF_count]['delta_t'], fit_params[WF_count]['A']*p1  )
+
             #print(this_key+[R[iR][0]])
             if return_data_est or DOPLOT:
-                #             wf_misfit(delta_t, sigma, WF, catalog, M, key_top, G=None, return_data_est=False):
                 WF.t=WF.t-WF.t0
                 R0, wf_est=wf_misfit(fit_params[WF_count]['delta_t'], fit_params[WF_count]['sigma'], WFs[WF_count], catalog, M, [this_key[0]], return_data_est=True)
                 fit_params[WF_count]['wf_est']=wf_est#integer_shift(wf_est, -delta_samp)
@@ -534,7 +389,7 @@ def fit_catalog(WFs, catalog_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, r
     result=dict()
     for key in WFp_empty:
         if key in ['wf_est']:
-            result[key]=np.concatenate( [ ii['wf_est'] for ii in fit_params ], axis=1 )
+            result[key]=np.concatenate( [ ii['wf_est'][:, None] for ii in fit_params ], axis=1 )
         else:
             result[key]=np.array([ii[key] for ii in fit_params]).ravel()
 
