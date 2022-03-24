@@ -13,7 +13,6 @@ os.environ["MKL_NUM_THREADS"]="1"  # multiple threads don't help that much
 import numpy as np
 #import matplotlib.pyplot as plt
 from ATM_waveform.read_ATM_wfs import read_ATM_file
-from ATM_waveform.fit_waveforms import listDict
 #from fit_waveforms import waveform
 from ATM_waveform.make_rx_scat_catalog import make_rx_scat_catalog
 
