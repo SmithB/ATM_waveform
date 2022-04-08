@@ -187,8 +187,8 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
         Ms={ch:{} for ch in channels}
         # this is the bulk of the work, and it's where problems happen.  Wrap it in a try:
         # and write out errors to be examined later
-        #try:
-        if True:
+        try:
+        #if True:
             if len(k_vals)>1:
                  # find the best misfit between this template and the waveform
 
@@ -313,12 +313,12 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                 print(WF_count)
             if M_list is not None:
                 M_list += [Ms]
-        #except KeyboardInterrupt:
-        #    sys.exit()
-        #except Exception as e:
-        #    print("Exception thrown for shot %d" % WF[channels[0]].shots)
-        #    print(e)
-        #    pass
+        except KeyboardInterrupt:
+            sys.exit()
+        except Exception as e:
+            print("#Exception thrown for shot %d" % WF[channels[0]].shots)
+            print("# "+str(e.__class__) + ' '+ str(e))
+            pass
         if np.mod(WF_count, 1000)==0 and WF_count > 0:
             print('    N=%d, N_keys=%d, %d' % (WF_count, len(list(catalogs[channels[0]])), len(list(catalogs[channels[1]]))))
 
