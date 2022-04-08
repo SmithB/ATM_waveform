@@ -19,7 +19,7 @@ class data(pc.data):
         return {
                 'G':['A', 'Amax', 'B', 'R','delta_t', 'nPeaks', 'noise_RMS',\
                      'shot','t0','tc'],
-                'both':['K0','R','sigma'],
+                'both':['K0','R','sigma','Kmin','Kmax'],
                 'location':['elevation', 'latitude', 'longitude']}
     def from_h5(self, filename, **kwargs):
         if 'field_dict' not in kwargs or kwargs['field_dict'] is None:
