@@ -161,11 +161,7 @@ def broadened_misfit(delta_ts, sigma, WF, catalog, M, K0_top, WF_top,  t_tol=Non
             if sigma==0:
                 this_p=parent_WF.p
             else:
-                try:
-                    this_p = broaden_p(parent_WF, sigma)
-                except Exception as e:
-                    print(e)
-                    this_p = broaden_p(parent_WF, np.abs(sigma))
+                this_p = broaden_p(parent_WF, sigma)
             if update_catalog:
                 catalog.update(this_key, p=this_p, p_squared=this_p*this_p,
                                mask=np.isfinite(this_p).astype(np.int32),\
