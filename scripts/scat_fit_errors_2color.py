@@ -5,10 +5,10 @@ Created on Tue Feb 19 09:47:58 2019
 @author: ben
 """
 import numpy as np
-from ATM_waveform.waveform import waveform
-from ATM_waveform.fit_waveforms  import gaussian, listDict
-from ATM_waveform.fit_ATM_scat import make_rx_scat_catalog
-from ATM_waveform.fit_ATM_scat_2color import fit_catalogs
+from ATM_waveform.fit_waveforms  import gaussian
+from ATM_waveform.make_rx_scat_catalog import make_rx_scat_catalog
+from ATM_waveform.fit_2color_waveforms import fit_catalogs
+from ATM_waveform import waveform, WFcatalog
 import h5py
 import sys
 import os
@@ -108,15 +108,21 @@ def errors_for_one_scat_file(scat_files, TX_files, channels, out_file=None):
     # initialize the library of templates for the transmit waveforms
     TX_library={}
     for ind, ch in enumerate(channels):
-        TX_library[ch] = listDict()
+        TX_library[ch] = {}
         TX_library[ch].update({0.:TX[ch]})
 
     # initialize the library of templates for the received waveforms
     WF_library=dict()
     for ind, ch in enumerate(channels):
         WF_library[ch] = dict()
-        WF_library[ch].update({0.:TX[ch]})
+        #WF_library[ch].update({0.:TX[ch]})
         WF_library[ch].update(make_rx_scat_catalog(TX[ch], h5_file=args.scat_files[ind]))
+
+    #WF_library=dict()
+    #for ind, ch in enumerate(channels):
+    #    WF_library[ch] = dict()
+    #    WF_library[ch].update({0.:TX[ch]})
+    #    WF_library[ch].update(make_rx_scat_catalog(TX[ch], h5_file=args.scat_files[ind]))
 
     out_fields=['K16','K84', 'sigma16', 'sigma84', 'sigma','A_scale','K0','Kmed', 'Ksigma','Ksigma_est', 'N','fitting_time']
     for ch in channels:
@@ -147,10 +153,13 @@ def errors_for_one_scat_file(scat_files, TX_files, channels, out_file=None):
                     continue
                 # calculate scaled and broadened waveforms
                 WFs=make_sim_WFs(N_WFs, WF_library, key, sigma, noise_RMS, amp_scale)
+                
+                catalog_buffers={ch:WFcatalog(TX[ch].nSamps, TX[ch].dt[0], t=TX[ch].t) for ch in channels}
+
                 # fit the waveforms
                 tic=time.time()
                 D_out= fit_catalogs(WFs, WF_library, sigmas, delta_ts, \
-                                            t_tol=0.25, sigma_tol=0.25)
+                                            t_tol=0.25, sigma_tol=0.25, catalogs=catalog_buffers)
                 Dstats['fitting_time'][ii]=time.time()-tic
                 for ch in channels:
                     Dstats['A_'+ch][ii]=WF_expected[ch].p.max()
