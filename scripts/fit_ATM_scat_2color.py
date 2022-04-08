@@ -189,15 +189,22 @@ def main(args):
             wf_data[ch].p[clipped]=np.NaN
         # now fit the returns with the waveform model
         tic=time()
+
+        if args.IRonly:
+            wf_data={'IR':wf_data['IR']}
+            out_channels=['IR']
+            catalog_buffers={'IR':catalog_buffers['IR']}
+            WF_library={'IR':WF_library['IR']}
+        else:
+            out_channels=channels
         D_out, catalog_buffers= fit_catalogs(wf_data, WF_library, sigmas, delta_ts, \
                                             t_tol=0.25, sigma_tol=0.25, return_data_est=args.waveforms, \
                                             return_catalogs=True,  catalogs=catalog_buffers, params=outDS)
-
         delta_time=time()-tic
 
         # write out the fit information
         N_out=D_out['both']['R'].size
-        for ch in channels:
+        for ch in out_channels:
             for key in outDS['ch']:
                 try:
                     out_h5[ch][key][outShot0:outShot0+N_out]=D_out[ch][key].ravel()
@@ -210,7 +217,11 @@ def main(args):
                 print("OSError for both channels, key=%s, outshot0=%d, outshotN=%d, nDS=%d"% (key, outShot0, outShot0+N_out, out_h5[key].size))
 
         # write out the location info
-        loc_ind=np.flatnonzero(np.in1d(loc_info['shot'], D_out[loc_info['channel']]['shot']))
+        if not args.IRonly:
+            loc_ind=np.flatnonzero(np.in1d(loc_info['shot'], D_out[loc_info['channel']]['shot']))
+        else:
+            G_shots=shots['G'][these_shots][np.in1d(shots['IR'][these_shots], D_out['IR']['shot'])]
+            loc_ind = np.flatnonzero(np.in1d(loc_info['shot'], G_shots))
         for field in outDS['location']:
             out_h5['location'][field][outShot0:outShot0+N_out]=loc_info[field][loc_ind]
 
@@ -220,8 +231,10 @@ def main(args):
                 out_h5['RX/'+ch+'/p_fit'][:, outShot0:outShot0+N_out] = np.squeeze(D_out[ch]['wf_est']).T
                 out_h5['RX/'+ch+'/p'][:, outShot0:outShot0+N_out] = wf_data[ch].p
                 out_h5['RX/'+ch+'/t_shift'][outShot0:outShot0+N_out] = D_out[ch]['t_shift'].ravel()
-
-        print("  shot=%d out of %d, N_keys=%d, dt=%5.1f" % (shot0+blocksize, start_vals[-1]+blocksize, len(catalog_buffers['G'].index.keys()), delta_time))
+        
+        print(f"  shot=%d out of %d, N_keys=%s, dt=%5.1f" % (shot0+blocksize, start_vals[-1]+blocksize,
+                                                             str({ch:len(catalog_buffers[ch].index.keys()) for ch in catalog_buffers.keys()}),
+                                                                 delta_time))
     print("   time to fit RX=%3.2f" % (time()-time_old))
 
     if args.waveforms:
@@ -246,6 +259,7 @@ if __name__=="__main__":
     parser.add_argument('--everyNTX', type=int, default=100)
     parser.add_argument('--reduce_by', '-r', type=int, default=1)
     parser.add_argument('--TXfiles', '-T', type=str, nargs=n_chan, default=None)
+    parser.add_argument('--IRonly', '-I', action='store_true')
     parser.add_argument('--waveforms', '-w', action='store_true', default=False)
     parser.add_argument('--ch_names','-c', type=str, nargs=n_chan, default=['IR','G'])
     args=parser.parse_args()
