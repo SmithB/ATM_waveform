@@ -8,6 +8,8 @@ Created on Wed Nov 14 21:51:42 2018
 #  2 ./IR/ILNIRW1Bprelim_20181028_013800.atm6CT7.filt.h5 ./green/ILNSAW1Bprelim_20181028_013800.atm6DT7.filt.h5 20181028_013800_out.h5 -f SRF_IR_full.h5 SRF_green_full.h5 -T TX_IR.h5 TX_green.h5 -c IR G
 #  1 ./green/ILNSAW1Bprelim_20181028_013800.atm6DT7.filt.h5 20181028_013800_G_out.h5 -f SRF_green_full.h5 -T  TX_green.h5 -c G
 
+#  1 green/ILNSAW1B_20190906_133100.atm6DT7.h5 20190906_133100_out.h5 -c G -f data/SRF_green_full.h5  -T TX_green.h5  -n 2000 -r 4
+
 import os
 os.environ["MKL_NUM_THREADS"]="1"  # multiple threads don't help that much
 import numpy as np
@@ -52,7 +54,7 @@ def main(args):
     input_files={}
     for ii, ch in enumerate(args.ch_names):
         if ch != 'None':
-            input_files[ch]=args.input_files[ii]
+            input_files[ch]=os.path.join(args.root, args.input_files[ii])
     channels = list(input_files.keys())
 
     # get the waveform count from the output file
@@ -92,7 +94,7 @@ def main(args):
     TX={}
     # get the transmit pulse
     for ind, ch in enumerate(channels):
-        with h5py.File(args.TXfiles[ind],'r') as fh:
+        with h5py.File(os.path.join(args.root, args.TXfiles[ind]),'r') as fh:
             TX[ch]=waveform(np.array(fh['/TX/t']), np.array(fh['/TX/p']) )
         TX[ch].t -= TX[ch].nSigmaMean()[0]
         TX[ch].tc = 0
@@ -113,7 +115,7 @@ def main(args):
     for ind, ch in enumerate(channels):
         WF_library[ch] = dict()
         WF_library[ch].update({0.:TX[ch]})
-        WF_library[ch].update(make_rx_scat_catalog(TX[ch], h5_file=args.scat_files[ind]))
+        WF_library[ch].update(make_rx_scat_catalog(TX[ch], h5_file=os.path.join(args.root, args.scat_files[ind])))
 
 
     print("Returns:")
@@ -246,5 +248,6 @@ if __name__=="__main__":
     parser.add_argument('--TXfiles', '-T', type=str, nargs=n_chan, default=None)
     parser.add_argument('--waveforms', '-w', action='store_true', default=False)
     parser.add_argument('--ch_names','-c', type=str, nargs=n_chan, default=['IR','G'])
+    parser.add_argument('--root', type=str, default='')
     args=parser.parse_args()
     main(args)
