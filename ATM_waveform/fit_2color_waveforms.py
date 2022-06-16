@@ -157,8 +157,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
 
     # loop over input waveforms
     for WF_count in range(N_shots):
-        #if len(k_vals) > 1:
-        #    print(WF_count)
+
         fit_params=deepcopy(WFp_empty)
         WF={ch:WFs[ch][WF_count] for ch in channels}
 
@@ -184,7 +183,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
         Ms={ch:listDict() for ch in channels}
         # this is the bulk of the work, and it's where problems happen.  Wrap it in a try:
         # and write out errors to be examined later
-        if True:
+        try:
             if len(k_vals)>1:
                  # find the best misfit between this template and the waveform
                 fB=lambda ind:fit_broadened(delta_ts, None, WF, catalogs, Ms, [k_vals[ind]], sigma_tol=sigma_tol, t_tol=t_tol, sigma_last=sigma_last, refine_sigma=True)
@@ -300,7 +299,6 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                 colors={'IR':'r','G':'g'}
                 this_title=''
                 for ch in channels:
-                    #plt.plot(WF[ch].t, integer_shift(WF[ch].p, delta_samp),'.', color=colors[ch])
                     plt.plot(WF[ch].t,  WF[ch].p, 'x', color=colors[ch])
                     plt.plot(WF[ch].t,  wf_est[ch], color=colors[ch])
                     this_title+='%s: K=%3.2g, dt=%3.2g, $\sigma$=%3.2g, R=%3.2f\n' % (ch, this_key[0], fit_params[ch]['delta_t'], fit_params[ch]['sigma'], fit_params[ch]['R'])
@@ -308,14 +306,15 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                 print(WF_count)
             if M_list is not None:
                 M_list += [Ms]
-        #except KeyboardInterrupt:
-        #    sys.exit()
-        #except Exception as e:
-        #    print("Exception thrown for shot %d" % WF[channels[0]].shots)
-        #    print(e)
-        #    pass
+        except KeyboardInterrupt:
+            sys.exit()
+        except Exception as e:
+            print("Exception thrown for shot %d" % WF[channels[0]].shots)
+            print(e)
+            pass
         if np.mod(WF_count, 1000)==0 and WF_count > 0:
-            print('    N=%d, N_keys=%d, %d' % (WF_count, len(list(catalogs[channels[0]])), len(list(catalogs[channels[1]]))))
+            print('    N=%d, N_keys=%d, %d' % \
+                  (WF_count, len(list(catalogs[channels[0]])), len(list(catalogs[channels[1]]))), flush=True)
 
     result={}
     for ch in channels+['both']:
