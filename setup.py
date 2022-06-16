@@ -29,12 +29,10 @@ extra_compile_args = ["-DNDEBUG", "-O3"]
 
 
 extensions=[Extension('ATM_waveform.'+module, sources=['ATM_waveform/'+module+'.pyx'], extra_compile_args=extra_compile_args) for module in \
-            ['corr_no_mean','unrefined_misfit','refined_misfit']]
-
+                        ['corr_no_mean','calc_misfit_stats']]
+            #'unrefined_misfit','refined_misfit', 
+            #['calc_misfit_stats']]
 scripts = [os.path.join('scripts',f) for f in os.listdir('scripts') if not (f[0]=='.' or f[-1]=='~' or os.path.isdir(os.path.join('scripts', f)))]
-
-
-
 
 setup(
     name='ATM_waveform',
