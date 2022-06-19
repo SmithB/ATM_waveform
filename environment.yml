@@ -1,0 +1,15 @@
+name: ATM_waveform
+channels:
+  - conda_forge
+  - defaults
+dependencies:
+  - pip
+  - scipy
+  - numpy
+  - h5py
+  - matplotlib
+  - gdal
+  - ipykernel
+  - cython
+  - tmux
+  - sortedcontainers
