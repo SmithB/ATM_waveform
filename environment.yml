@@ -13,3 +13,4 @@ dependencies:
   - cython
   - tmux
   - sortedcontainers
+  - cython

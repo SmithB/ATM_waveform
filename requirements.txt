@@ -1,0 +1,8 @@
+numpy
+scipy
+pyproj
+matplotlib
+h5py
+gdal
+sortedcollections
+cython
