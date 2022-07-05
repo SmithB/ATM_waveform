@@ -1,0 +1,1 @@
+gcc -O3   small_mc_dist_depth.c -o small_mc_dist_depth -lm
