@@ -6,6 +6,7 @@ IR
 build/
 *.c
 *.so
+Untitled*.ipynb
 green
 make_t_misfit_plot.py
 
