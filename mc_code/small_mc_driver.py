@@ -5,7 +5,7 @@ import numpy as np
 
 parser=argparse.ArgumentParser(description='run the small_mc c code')
 parser.add_argument('--photons', '-p',  type=int, help="number of photons per run")
-parser.add_argument('--asymmetry_factor', '-g', default=1, type=float, help='asymmetry factor')
+parser.add_argument('--asymmetry_factor', '-g', default=0, type=float, help='asymmetry factor')
 parser.add_argument('--num_runs', '-N', type=int, help='number of runs')
 parser.add_argument('--output_base','-o', type=str, default='mc_out', help='output name base')
 parser.add_argument('--queue_file','-q', type=str, default='mc_queue.txt')
