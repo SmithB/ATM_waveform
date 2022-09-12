@@ -243,7 +243,8 @@ def fit_broadened(delta_ts, sigmas, WF, catalog,  M, key_top, sigma_tol=None, si
     M[key_top]['best']={'key':this_key,'R':R_best}
     return R_best
 
-def fit_catalog(WFs, catalog_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, return_data_est=False, return_catalog=False, catalog=None):
+def fit_catalog(WFs, catalog_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
+                return_data_est=False, return_catalog=False, catalog=None):
     """
     Search a library of waveforms for the best match between the broadened, shifted library waveform
     and the target waveforms
@@ -349,7 +350,8 @@ def fit_catalog(WFs, catalog_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, r
             sigma_last=M[this_key]['sigma']
             R_max=fit_params[WF_count]['R']*(1.+1./np.sqrt(WF.t.size))
             # default value for K0_ref
-            fit_params[WF_count]['K0_refined'] = M[this_key]['K0']
+            if 'K0' in M[this_key]:
+                fit_params[WF_count]['K0_refined'] = M[this_key]['K0']
             if np.sum(searched_keys>0)>=3:
                 these=np.flatnonzero(searched_keys>0)
                 if len(these) > 3:
