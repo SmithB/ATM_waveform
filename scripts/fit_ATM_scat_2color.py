@@ -146,7 +146,7 @@ def main(args):
             try:
                 D=read_ATM_file(input_files[ch], shot0=ch_shots[0], nShots=ch_shots[-1]-ch_shots[0]+1)
             except Exception as e:
-                print(f"caught exception for channel {ch} for shots {ch_shots[0]} to {ch_shots[1]}:")
+                print(f"caught exception for channel {ch} for shots {ch_shots[0]} to {ch_shots[-1]}:")
                 print(e)
                 continue
             # fit the transmit data for this channel and these pulses
@@ -210,10 +210,13 @@ def main(args):
                 print("OSError for both channels, key=%s, outshot0=%d, outshotN=%d, nDS=%d"% (key, outShot0, outShot0+N_out, out_h5[key].size))
 
         # write out the location info
+
         loc_ind=np.flatnonzero(np.in1d(loc_info['shot'], D_out[loc_info['channel']]['shot']))
         for field in outDS['location']:
-            out_h5['location'][field][outShot0:outShot0+N_out]=loc_info[field][loc_ind]
-
+            try:
+                out_h5['location'][field][outShot0:outShot0+N_out]=loc_info[field][loc_ind]
+            except IndexError:
+                print(f"\t fit_ATM_scat_2color.py: coud not write location field {field}")
         # write out the waveforms
         if args.waveforms:
             for ch in channels:
