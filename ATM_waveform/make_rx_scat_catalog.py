@@ -26,16 +26,23 @@ def make_rx_scat_catalog(TX, h5_file=None, reduce_res=False):
         t_full=np.arange(TXc.size)*0.25
         t_full -= waveform(t_full, TXc).nSigmaMean()[0]
         RX=dict()
-        r_vals = np.array(h5f['r_eff'])
-        if reduce_res:
-            r_vals=np.concatenate([r_vals[r_vals< 1e-4][::10], r_vals[(r_vals >= 1e-4) &  (r_vals < 5e-3)][::2], r_vals[r_vals >= 5e-3] ])
-        for row, r_val in enumerate(h5f['r_eff']):
-            if r_val not in r_vals:
+        if 'r_eff' in h5f:
+            key_vals = np.array(h5f['r_eff'])
+            key_field='r_eff'
+            if reduce_res:
+                key_vals=np.concatenate([key_vals[key_vals< 1e-4][::10],
+                                         key_vals[(key_vals >= 1e-4) &  (key_vals < 5e-3)][::2], key_vals[key_vals >= 5e-3] ])
+
+        else:
+            key_vals = np.array(h5f['K'])
+            key_field='K'
+        for row, key_val in enumerate(h5f[key_field]):
+            if key_val not in key_vals:
                 continue
             rx0=h5f['p'][row,:]
             temp=np.convolve(TX.p.ravel(), rx0, 'full')*0.25e-9
-            RX[r_val]=waveform(TX.t, np.interp(TX.t.ravel(), t_full.ravel(), temp).reshape(TX.t.shape))
-            RX[r_val].t0=0.
-            RX[r_val].tc=RX[r_val].nSigmaMean()[0]
+            RX[key_val]=waveform(TX.t, np.interp(TX.t.ravel(), t_full.ravel(), temp).reshape(TX.t.shape))
+            RX[key_val].t0=0.
+            RX[key_val].tc=RX[key_val].nSigmaMean()[0]
     return RX
 
