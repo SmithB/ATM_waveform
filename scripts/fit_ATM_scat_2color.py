@@ -190,7 +190,8 @@ def main(args):
         # now fit the returns with the waveform model
         tic=time()
         D_out, catalog_buffers= fit_catalogs(wf_data, WF_library, sigmas, delta_ts, \
-                                            t_tol=0.25, sigma_tol=0.25, return_data_est=args.waveforms, \
+                                            t_tol=0.25, sigma_tol=args.sigma_tol, \
+                                            return_data_est=args.waveforms, \
                                             return_catalogs=True,  catalogs=catalog_buffers, params=outDS)
 
         delta_time=time()-tic
@@ -251,6 +252,7 @@ if __name__=="__main__":
     parser.add_argument('--TXfiles', '-T', type=str, nargs=n_chan, default=None)
     parser.add_argument('--waveforms', '-w', action='store_true', default=False)
     parser.add_argument('--ch_names','-c', type=str, nargs=n_chan, default=['IR','G'])
+    parser.add_argument('--sigma_tol', type=float, default=0.25, help='tolerance for waveform gaussian spreading')
     parser.add_argument('--root', type=str, default='')
     args=parser.parse_args()
     main(args)
