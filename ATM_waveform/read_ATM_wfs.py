@@ -83,16 +83,22 @@ def read_ATM_file(fname, getCountAndReturn=False, shot0=0, nShots=np.Inf, readTX
         D_in[key]=np.array(h5f[key][sample_start:sample_end+1], dtype=int)
 
         TX=list()
+        NTX=[]
         RX=list()
         tx_samp0=list()
         rx_samp0=list()
         RX=list()
         nPeaks=list()
         rxBuffer=np.zeros(192)+np.NaN
+        txBuffer=np.zeros(192)+np.NaN
         for shot in range(int(nShots)):
             wfd=read_wf(D_in, shot, starting_sample=sample_start, read_tx=readTX, read_rx=readRX)
             if readTX:
-                TX.append(wfd['tx']['P'][0:160])
+                nTX=np.minimum(190, wfd['tx']['P'].size)
+                txBuffer[0:nTX]=wfd['tx']['P'][0:nTX]
+                txBuffer[nTX+1:]=np.NaN
+                TX.append(txBuffer.copy())
+                #TX.append(wfd['tx']['P'][0:160])
                 tx_samp0.append(wfd['tx']['pos'])
             if readRX:
                 nRX=np.minimum(190, wfd['rx']['P'].size)
@@ -102,17 +108,21 @@ def read_ATM_file(fname, getCountAndReturn=False, shot0=0, nShots=np.Inf, readTX
                 nPeaks.append(wfd['rx']['count'])
                 rx_samp0.append(wfd['rx']['pos'])
         shots=np.arange(shot0, shotN, dtype=int)
-        try:
-            result={ 'az':D_in['/laser/scan_azimuth'],'dt':dt, 'elevation':D_in['/footprint/elevation'],
-                    'latitude':D_in['/footprint/latitude'],'longitude':D_in['/footprint/longitude']}
-        except KeyError:
-            result={}
+        result={ 'az':D_in['/laser/scan_azimuth'],'dt':dt}
+        for field in ['elevation','latitude','longitude']:
+            try:
+                result[field]=D_in['/footprint/'+field]
+            except KeyError:
+                print(f'\t read_ATM_WFs.py: field footprint/{field} not readable')
+                pass
         result['calrng']=D_in['/laser/calrng']
         result['seconds_of_day']=D_in['/waveforms/twv/shot/seconds_of_day']
-        result['scan_azimuth']=D_in['/laser/scan_azimuth']
+
         if readTX:
             TX=np.c_[TX].transpose()
-            result['TX']=waveform(np.arange(TX.shape[0])*dt, TX, shots=shots, t0=tx_samp0*dt, seconds_of_day=D_in['/waveforms/twv/shot/seconds_of_day'])
+            result['TX']=waveform(np.arange(TX.shape[0])*dt, TX, shots=shots, \
+                                t0=tx_samp0*dt, \
+                                seconds_of_day=D_in['/waveforms/twv/shot/seconds_of_day'])
 
         if readRX:
             RX=np.c_[RX].transpose()
