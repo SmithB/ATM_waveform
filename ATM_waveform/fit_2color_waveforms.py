@@ -11,7 +11,7 @@ import sys
 #import bisect
 from ATM_waveform.waveform import waveform
 from copy import deepcopy
-from ATM_waveform.fit_waveforms import listDict, integer_shift, broadened_misfit, wf_misfit
+from ATM_waveform.fit_waveforms import listDict, integer_shift, broadened_misfit, wf_misfit, broaden_p
 from ATM_waveform.golden_section_search import golden_section_search
 
 
@@ -79,7 +79,7 @@ def fit_broadened(delta_ts, sigmas,  WFs, catalogs,  Ms, key_top, sigma_tol=0.12
             R_best += broadened_misfit(delta_ts, sigma_best, WFs[ch], this_catalog, Ms[ch], key_top, t_tol=t_tol, refine_parabolic=True)/WFs[ch].noise_RMS
     return R_best
 
-def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, return_data_est=False, return_catalogs=False, catalogs=None, params=None, M_list=None):
+def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None, return_data_est=False, return_catalogs=False, catalogs=None, params=None, M_list=None, sigma_max=5):
     """
     Search a library of waveforms for the best match between the broadened, shifted library waveform
     and the target waveforms
@@ -101,6 +101,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
             return_data_est:  set to 'true' if the algorithm should return the best-matching
                 shifted and broadened template for each input
             t_tol: tolerance for the time search, defaults to WF.t_samp/10
+            sigma_max: the maximum sigma value to consider.  Defaults to 5.
     Outputs:
         WFp: a set of best-fitting waveform parameters that give:
             delta_t: the time-shift required to align the template and measured waveforms
@@ -128,6 +129,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
     WFp_empty['both']={f:np.NaN for f in params['both']}
     if return_data_est:
         for ch in channels:
+            WFp_empty[ch]['wf']=np.zeros_like(WFs[ch].t)+np.NaN
             WFp_empty[ch]['wf_est']=np.zeros_like(WFs[ch].t)+np.NaN
             WFp_empty[ch]['t_shift']=np.NaN
 
@@ -136,6 +138,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
 
     # make a container for the pulse widths for the catalogs, and copy the input catalogs into the buffer catalogs
     W_catalogs={}
+    W_spread={}
     for ch in channels:
         k_vals=np.sort(list(catalogs_in[ch]))
         W_catalogs[ch]=np.zeros(k_vals.shape)
@@ -149,7 +152,7 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                 # make a copy of the current template
                 temp=catalogs_in[ch][kk]
                 catalogs[ch][[kk]]=waveform(temp.t, temp.p, t0=temp.t0, tc=temp.tc)
-
+        W_spread[ch]=np.nanmax(W_catalogs[ch])-np.nanmin(W_catalogs[ch])
     fit_param_list=[]
     sigma_last = None
     t_center={ch:WFs[ch].t.mean() for ch in channels}
@@ -186,21 +189,30 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
         try:
             if len(k_vals)>1:
                  # find the best misfit between this template and the waveform
-                fB=lambda ind:fit_broadened(delta_ts, None, WF, catalogs, Ms, [k_vals[ind]], sigma_tol=sigma_tol, t_tol=t_tol, sigma_last=sigma_last, refine_sigma=True)
+                fB=lambda ind:fit_broadened(delta_ts, None, WF, catalogs, Ms, [k_vals[ind]], sigma_tol=sigma_tol, t_tol=t_tol, sigma_last=sigma_last, sigma_max=sigma_max, refine_sigma=True)
                 W_broad_ind=0
+                W_step=2
                 # find the first catalog entry that's broader than the waveform (check both cnannels, pick the broader one)
                 for ch in channels:
                     this_broad_ind=np.flatnonzero(W_catalogs[ch] >= WF[ch].fwhm()[0])
                     if len(this_broad_ind)==0:
-                        this_broad_ind=len(W_catalogs[ch])
+                        this_broad_ind=len(W_catalogs[ch])-1
                     else:
                         this_broad_ind=this_broad_ind[0]
                     W_broad_ind=np.maximum(W_broad_ind, this_broad_ind)
+                    # test indices between 0 and that of the first model waveform wider than the current waveform
+                    ### check here if the runtime gets too large
+                    W_step = np.maximum(W_step, len(W_catalogs[ch])*W_spread[ch]/W_catalogs[ch][W_broad_ind])
                 # search two steps on either side of the broadness-matched waveform, as well as zero (all broadening due to roughness)
-                key_search_ind=np.array(sorted(tuple(set([0, W_broad_ind-2, W_broad_ind+2]))))
+                key_search_ind=list(np.arange(0, W_broad_ind+W_step, W_step, dtype=int))
+                key_search_ind=np.array(sorted(tuple(set(key_search_ind+[ W_broad_ind-2, W_broad_ind+2]))))
                 key_search_ind=key_search_ind[(key_search_ind>=0) & (key_search_ind<len(k_vals))]
                 search_hist={}
-                iBest, Rbest = golden_section_search(fB, key_search_ind, delta_x=2, bnds=[0, len(k_vals)-1], integer_steps=True, tol=1, refine_parabolic=False, search_hist=search_hist)
+                
+                iBest, Rbest = golden_section_search(fB, key_search_ind, delta_x=2, \
+                                bnds=[0, len(k_vals)-1], integer_steps=True, tol=1, \
+                                search_tag='best_K0', \
+                                refine_parabolic=False, search_hist=search_hist)
                 iBest=int(iBest)
             else:
                 _=fit_broadened(delta_ts, None, WF, catalogs, Ms, [k_vals[0]], sigma_tol=sigma_tol, t_tol=t_tol, sigma_last=sigma_last)
@@ -271,8 +283,15 @@ def fit_catalogs(WFs, catalogs_in, sigmas, delta_ts, t_tol=None, sigma_tol=None,
                 # call WF_misfit for each channel
                 wf_est={}
                 for ch, WFi in WF.items():
-                    R0, wf_est=wf_misfit(fit_params[ch]['delta_t'], fit_params[ch]['sigma'], WF[ch], catalogs[ch], Ms[ch], [this_key[0]], return_data_est=True)
-                    fit_params[ch]['wf_est']=wf_est
+                    fit_params[ch]['wf']=WF[ch].p
+                    this_key=(fit_params['both']['K0'][0],0)
+                    p_broad=fit_params[ch]['A'] \
+                            * broaden_p(catalogs[ch][this_key],\
+                                        fit_params['both']['sigma']).ravel()
+                    fit_params[ch]['wf_est']=np.interp(WFi.t, catalogs[ch][this_key].t.ravel(),\
+                                                       p_broad).ravel()
+                    #fit_params[ch]['wf_est']=fit_params[ch]['A']*catalogs[ch]\
+                    #    [(fit_params['both']['K0'][0], fit_params['both']['sigma'])].p
                     fit_params[ch]['t_shift']=WF[ch].t_shift
 
             if KEY_SEARCH_PLOT:
