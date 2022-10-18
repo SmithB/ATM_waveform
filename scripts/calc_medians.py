@@ -11,6 +11,7 @@ import glob
 import numpy as np
 import sys
 import os
+import argparse
 from ATM_waveform.three_sigma_edit_fit import three_sigma_edit_fit
 import pointCollection as pc
 
@@ -30,19 +31,42 @@ def write_data(in_file, out_file,  Db, thumb_dir):
     for count, key in enumerate(Db.keys()):
         Db[key].to_h5(out_file, group=key, replace=(count==0))
 
-thedir=sys.argv[1]
+
+parser = argparse.ArgumentParser(description='Fit the waveforms from an ATM file with a set of scattering parameters')
+parser.add_argument('input_dir', type=str)
+parser.add_argument('--input_file', '-f', type=str)
+parser.add_argument('--EPSG','-E', type=str)
+parser.add_argument('--queue','-q', action='store_true')
+
+args=parser.parse_args()
+
+thedir=args.input_dir
 thumb_dir=thedir+'/thumbs'
 if not(os.path.isdir(thumb_dir)):
     os.mkdir(thumb_dir)
 
-EPSG=sys.argv[2]
-fnames=glob.glob(thedir+'/I*.h5')
+EPSG=args.EPSG
+
+if args.input_file is None:
+    fnames=glob.glob(thedir+'/I*.h5')
+else:
+    if os.path.isfile(args.input_file):
+        fnames=[args.input_file]
+        args.input_dir='.'
+    if not os.path.isfile(args.input_file):
+        fnames=[os.path.join(args.input_dir, args.input_file)]    
+
 fnames.sort()
 for fname in fnames:
     
     out_file=thumb_dir+'/'+os.path.basename(fname)
     if os.path.isfile(out_file):
         continue
+    if args.queue:
+        thestr=f"calc_medians.py {thedir} -f {fname} --EPSG {args.EPSG}"
+        print(thestr)
+        continue
+
     print("working on "+ fname)
     try:
         D=pc.data().from_h5(fname, field_dict=field_dict).get_xy(EPSG=int(EPSG)) 
