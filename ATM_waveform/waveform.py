@@ -180,9 +180,11 @@ class waveform(object):
         """
         if t50_minus is not None:
             t50=self.t50()
-            bgEst=np.zeros(self.size)
-            noiseEst=np.zeros(self.size)
+            bgEst=np.zeros(self.size)+np.NaN
+            noiseEst=np.zeros(self.size)+np.NaN
             for ii in range(self.size):
+                if not np.isfinite(t50[ii]):
+                    continue
                 bgind=np.where(self.t < t50[ii]-t50_minus)[0]
                 if len(bgind) > 1:
                     bgEst[ii]=np.nanmean(self.p[bgind, ii])
@@ -206,11 +208,14 @@ class waveform(object):
         """
         Find the first 50%-max threshold crossing of a waveform
         """
-        t50=np.zeros(self.size)
+        t50=np.zeros(self.size)+np.NaN
         for col in np.arange(self.size):
             p=self.p[:,col]
             p50=np.nanmax(p)/2
-            i50=np.where(p>p50)[0][0]
+            i50=np.argmax(p>p50) # gives the index of the first true element
+            if i50==0:  # tends to indicate a problem
+                if not p[i50] > p50:
+                    continue
             dp=(p50 - p[i50-1]) / (p[i50] - p[i50-1])
             t50[col] = self.t[i50-1] + dp*self.dt
         return t50
