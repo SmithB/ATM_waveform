@@ -31,7 +31,8 @@ def parabolic_search_refinement(x, R):
 
 def golden_section_search(f, x0, delta_x, bnds=[-np.Inf, np.Inf], \
                           integer_steps=False, step_size=1, tol=0.01, \
-                              max_count=100, refine_parabolic=False,
+                              max_count=100, refine_parabolic=False,\
+                              search_tag=None,\
                               search_hist={}, fn_args=None, fn_kwargs=None):
     """
     iterative search using the golden-section algorithm (more or less)
@@ -63,6 +64,10 @@ def golden_section_search(f, x0, delta_x, bnds=[-np.Inf, np.Inf], \
         step_size=step_size[0]
 
     while (len(searched)==0) or (largest_gap > tol):
+        # uncomment this to debug
+        #if search_tag is not None:
+        #    print(search_tag)
+        #    print()
         if hasattr(x0, '__iter__'):
             for x in x0:
                 # Calculate the residuals here:
