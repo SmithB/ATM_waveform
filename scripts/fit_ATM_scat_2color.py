@@ -144,6 +144,7 @@ def main(args):
             ch_shots=shots[ch][these_shots]
             # make the return waveform structure
             try:
+                print([ch_shots[0], ch_shots[-1]-ch_shots[0]+1])
                 D=read_ATM_file(input_files[ch], shot0=ch_shots[0], nShots=ch_shots[-1]-ch_shots[0]+1)
             except Exception as e:
                 print(f"caught exception for channel {ch} for shots {ch_shots[0]} to {ch_shots[-1]}:")
@@ -191,6 +192,7 @@ def main(args):
         tic=time()
         D_out, catalog_buffers= fit_catalogs(wf_data, WF_library, sigmas, delta_ts, \
                                             t_tol=0.25, sigma_tol=args.sigma_tol, \
+                                            sigma_max=args.sigma_max,\
                                             return_data_est=args.waveforms, \
                                             return_catalogs=True,  catalogs=catalog_buffers, params=outDS)
 
@@ -222,7 +224,7 @@ def main(args):
         if args.waveforms:
             for ch in channels:
                 out_h5['RX/'+ch+'/p_fit'][:, outShot0:outShot0+N_out] = np.squeeze(D_out[ch]['wf_est']).T
-                out_h5['RX/'+ch+'/p'][:, outShot0:outShot0+N_out] = wf_data[ch].p
+                out_h5['RX/'+ch+'/p'][:, outShot0:outShot0+N_out] = np.squeeze(D_out[ch]['wf']).T
                 out_h5['RX/'+ch+'/t_shift'][outShot0:outShot0+N_out] = D_out[ch]['t_shift'].ravel()
 
         print("  shot=%d out of %d, N_keys=%d, dt=%5.1f" % (shot0+blocksize, start_vals[-1]+blocksize, len(catalog_buffers['G'].keys()), delta_time))
@@ -253,6 +255,7 @@ if __name__=="__main__":
     parser.add_argument('--waveforms', '-w', action='store_true', default=False)
     parser.add_argument('--ch_names','-c', type=str, nargs=n_chan, default=['IR','G'])
     parser.add_argument('--sigma_tol', type=float, default=0.25, help='tolerance for waveform gaussian spreading')
+    parser.add_argument('--sigma_max', type=float, default=5, help='maximum value of sigma to consider, defautls to 5')
     parser.add_argument('--root', type=str, default='')
     args=parser.parse_args()
     main(args)
