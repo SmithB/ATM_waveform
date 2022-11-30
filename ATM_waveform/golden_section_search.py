@@ -90,7 +90,7 @@ def golden_section_search(f, x0, delta_x, bnds=[-np.Inf, np.Inf], \
             x0 = searched[0] - delta_x
             if x0 < bnds[0]:
                 # if we're out of bounds, search between the minimum searched value and the left boundary
-                if x0 in searched:
+                if bnds[0] in searched:
                     ep = [ bnds[0], searched[1] ]
                 else:
                     ep = [ bnds[0], searched[0] ]
