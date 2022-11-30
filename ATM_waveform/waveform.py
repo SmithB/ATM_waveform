@@ -114,6 +114,8 @@ class waveform(object):
         """
         if els is not None:
             #C=np.cumsum(np.concatenate([[0],self.p[els][:-1].ravel()]))
+            if np.sum(els) < 2:
+                return np.NaN+np.zeros_like(P)
             C=sciint.cumtrapz(self.p[els].ravel(), self.t[els].ravel(), initial=0)
             return np.interp(P, C/C[-1], self.t[els])
         else:
@@ -124,6 +126,8 @@ class waveform(object):
         """
         Calculate half the difference bewteen the 16th and 84th percentiles of a distribution
         """
+        if np.sum(els) < 2:
+            return np.NaN
         lowHigh=self.percentile(np.array([0.16, 0.84]), els=els)
         return (lowHigh[1]-lowHigh[0])/2.
 
