@@ -79,6 +79,13 @@ def golden_section_search(f, x0, delta_x, bnds=[-np.Inf, np.Inf], \
             searched.add(x0)
         # make a list of R_vals searched
         R_vals=np.array([R_dict[x] for x in searched])
+        if np.any(np.isnan(R_vals)):
+            print(f"golden section search: search_tag={search_tag}:\n found NaN value in R")
+            # enable this code for breakpoints:
+            #bad = np.flatnonzero(np.isnan(R_vals))[0]
+            #RR=f(searched[bad], *fn_args, **fn_kwargs)
+            #print(RR)
+            
         # find the minimum of the R vals
         try:
             iR=np.argmin(R_vals)
