@@ -14,4 +14,7 @@ from .three_sigma_edit_fit import *
 from .calc_misfit_stats import calc_misfit_stats
 from .calc_R_and_tshift import calc_R_and_tshift
 from .golden_section_search import golden_section_search
+from .make_rx_scat_catalog import *
+from .fit_2color_waveforms import fit_catalogs
+
 from ATM_waveform import fit

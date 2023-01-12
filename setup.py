@@ -31,7 +31,8 @@ extra_compile_args = ["-DNDEBUG", "-O3"]
 extensions=[Extension('ATM_waveform.'+module, sources=['ATM_waveform/'+module+'.pyx'], extra_compile_args=extra_compile_args) for module in \
                         ['corr_no_mean','calc_misfit_stats']]
 
-scripts = [os.path.join('scripts',f) for f in os.listdir('scripts') if not (f[0]=='.' or f[-1]=='~' or os.path.isdir(os.path.join('scripts', f)))]
+scripts = [os.path.join('scripts',f) for f in os.listdir('scripts') if not (f[0]=='.' or f[-1]=='~' or os.path.isdir(os.path.join('scripts', f))) or f.endswith('h5')]+\
+    [os.path.join('ATM_waveform', f) for f in ['fit_ATM_scat_2color.py', 'fit_ATM_scat.py']]
 
 setup(
     name='ATM_waveform',
