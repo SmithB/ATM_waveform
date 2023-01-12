@@ -5,10 +5,7 @@ Created on Tue Feb 19 09:47:58 2019
 @author: ben
 """
 import numpy as np
-from ATM_waveform.waveform import waveform
-from ATM_waveform.fit_waveforms  import gaussian, listDict
-from ATM_waveform.fit_ATM_scat import make_rx_scat_catalog
-from ATM_waveform.fit_ATM_scat_2color import fit_catalogs
+import ATM_waveform as aw
 import h5py
 import sys
 import os
@@ -54,11 +51,7 @@ def broadened_WF(WF, sigma):
     """
     Generate a version of WF broadened by a Gaussian of width sigma
     """
-    nK=3*np.ceil(sigma/WF.dt)
-    tK=np.arange(-nK, nK+1)*WF.dt
-    K=gaussian(tK, 0, sigma)
-    K=K/np.sum(K)
-    return waveform(WF.t, np.convolve(WF.p.ravel(), K,'same'))
+    return aw.waveform(WF.t, aw.broaden_p(WF, sigma))
 
 def make_sim_WFs(N_WFs, WF_library, key, sigma, noise_RMS, amp_scale):
     """
@@ -80,27 +73,27 @@ def make_sim_WFs(N_WFs, WF_library, key, sigma, noise_RMS, amp_scale):
         if sigma > 0:
             BW=broadened_WF(WF_library[ch][key], sigma)
         else:
-            BW=waveform(WF_library[ch][key].t, WF_library[ch][key].p)
+            BW=aw.waveform(WF_library[ch][key].t, WF_library[ch][key].p)
         #BW.normalize()
-        WFs[ch]=waveform(BW.t, np.tile(amp_scale[ch]*BW.p, [1, N_WFs])+\
+        WFs[ch]=aw.waveform(BW.t, np.tile(amp_scale[ch]*BW.p, [1, N_WFs])+\
            noise_RMS[ch]*np.random.randn(BW.p.size*N_WFs).reshape(BW.p.size, N_WFs))
         WFs[ch].noise_RMS=noise_RMS[ch]+np.zeros(WFs[ch].size)
         WFs[ch].shots=np.arange(WFs[ch].size)
     return WFs
 
 
-def errors_for_one_scat_file(scat_files, TX_files, channels, out_file=None):
 
+def errors_for_one_scat_file(test_scat_files, fit_scat_files, TX_files, channels, N_WFs=256, noise_amp=1, out_file=None):
+    
     sigmas=np.arange(0, 5, 0.25)
     # choose a set of delta t values
     delta_ts=np.arange(-1., 1.5, 0.5)
 
-    N_WFs=256
     TX={}
     # get the transmit pulse
     for ind, ch in enumerate(channels):
-        with h5py.File(args.TXfiles[ind],'r') as fh:
-            TX[ch]=waveform(np.array(fh['/TX/t']), np.array(fh['/TX/p']) )
+        with h5py.File(TX_files[ind],'r') as fh:
+            TX[ch]=aw.waveform(np.array(fh['/TX/t']), np.array(fh['/TX/p']) )
         TX[ch].t -= TX[ch].nSigmaMean()[0]
         TX[ch].tc = 0
         TX[ch].normalize()
@@ -108,30 +101,37 @@ def errors_for_one_scat_file(scat_files, TX_files, channels, out_file=None):
     # initialize the library of templates for the transmit waveforms
     TX_library={}
     for ind, ch in enumerate(channels):
-        TX_library[ch] = listDict()
+        TX_library[ch] = aw.listDict()
         TX_library[ch].update({0.:TX[ch]})
 
+    # initialize the library of templates for the test_waveforms
+    test_WF_library=dict()
+    for ind, ch in enumerate(channels):
+        test_WF_library[ch] = dict()
+        test_WF_library[ch].update({0.:TX[ch]})
+        test_WF_library[ch].update(aw.make_rx_scat_catalog(TX[ch], h5_file=test_scat_files[ind]))
+
+        
     # initialize the library of templates for the received waveforms
     WF_library=dict()
     for ind, ch in enumerate(channels):
         WF_library[ch] = dict()
         WF_library[ch].update({0.:TX[ch]})
-        WF_library[ch].update(make_rx_scat_catalog(TX[ch], h5_file=args.scat_files[ind]))
+        WF_library[ch].update(aw.make_rx_scat_catalog(TX[ch], h5_file=fit_scat_files[ind]))
 
-    out_fields=['K16','K84', 'sigma16', 'sigma84', 'sigma','A_scale','K0','Kmed', 'Ksigma','Ksigma_est', 'N','fitting_time']
+    out_fields=['K16','K84','K5','K95','sigma16', 'sigma84', 'sigma','A_scale','K0','Kmed', 'Ksigma','Ksigma_est', 'N','fitting_time']
     for ch in channels:
         out_fields.append('A_'+ch)
 
-    noise_RMS={'G':1, 'IR':0.25}
-    unit_amp_target={'G':175, 'IR':140}
+    noise_RMS={'G':noise_amp, 'IR':0.25*noise_amp}
+    unit_amp_target={'G':180, 'IR':140}
     sigma_vals=[0, 0.5, 1, 2]
-    A_scale=[0.5, 1, 1.25]
-    #A_vals=[50., 100., 200.]
-    K0_vals=np.array(list(WF_library['G'].keys()))[::4]
+    A_scale=[0.5, 0.75, 1, 1.25]
+    K0_vals=np.array(list(test_WF_library['G'].keys()))
     N_out=len(sigma_vals)*len(A_scale)*len(K0_vals)
     Dstats={field:np.zeros(N_out)+np.NaN for field in out_fields}
     # calculate waveforms with no scaling applied
-    WF_unscaled=make_sim_WFs(1, WF_library, list(WF_library['G'].keys())[1], 0, {'G':0, 'IR':0}, {'G':1, 'IR':1})
+    WF_unscaled=make_sim_WFs(1, test_WF_library, list(test_WF_library['G'].keys())[1], 0, {'G':0, 'IR':0}, {'G':1, 'IR':1})
     ii=0
     for key in K0_vals:
         for sigma in sigma_vals:
@@ -141,15 +141,15 @@ def errors_for_one_scat_file(scat_files, TX_files, channels, out_file=None):
                 amp_scale={ch:A*unit_amp_target[ch]/WF_unscaled[ch].p.max() for ch in channels}
 
                 #Calculate the noise-free waveforms
-                WF_expected=make_sim_WFs(1, WF_library, key, sigma,\
+                WF_expected=make_sim_WFs(1, test_WF_library, key, sigma,\
                                          {ch:0. for ch in channels}, amp_scale)
                 if np.min([WF_expected[ch].p.max()/noise_RMS[ch] for ch in channels]) < 3:
                     continue
                 # calculate scaled and broadened waveforms
-                WFs=make_sim_WFs(N_WFs, WF_library, key, sigma, noise_RMS, amp_scale)
+                WFs=make_sim_WFs(N_WFs, test_WF_library, key, sigma, noise_RMS, amp_scale)
                 # fit the waveforms
                 tic=time.time()
-                D_out= fit_catalogs(WFs, WF_library, sigmas, delta_ts, \
+                D_out= aw.fit_catalogs(WFs, WF_library, sigmas, delta_ts, \
                                             t_tol=0.25, sigma_tol=0.25)
                 Dstats['fitting_time'][ii]=time.time()-tic
                 for ch in channels:
@@ -163,6 +163,9 @@ def errors_for_one_scat_file(scat_files, TX_files, channels, out_file=None):
                 KR=sps.scoreatpercentile(D_out['both']['K0'], [16, 84])
                 Dstats['K16'][ii]=KR[0]
                 Dstats['K84'][ii]=KR[1]
+                KR=sps.scoreatpercentile(D_out['both']['K0'], [5, 95])
+                Dstats['K5'][ii]=KR[0]
+                Dstats['K95'][ii]=KR[1]
                 Dstats['Kmed'][ii]=np.nanmedian(D_out['both']['K0'])
                 Dstats['Ksigma_est'][ii]=np.nanmedian(D_out['both']['Kmax']-D_out['both']['Kmin'])
                 Dstats['Ksigma'][ii]=np.nanstd(D_out['both']['K0'])
@@ -170,7 +173,6 @@ def errors_for_one_scat_file(scat_files, TX_files, channels, out_file=None):
                 print('K0=%2.2g, sigma=%2.2f, A=%2.2f, ER=[%2.2g, %2.2g], E=%2.2g' %(key, sigma, A, KR[0]-key, KR[1]-key, Dstats['Ksigma'][ii]))
                 ii += 1
 
-    print("yep")
     if out_file is not None:
         if os.path.isfile(out_file):
             os.remove(out_file)
@@ -189,9 +191,15 @@ if __name__=="__main__":
     parser.add_argument('output_file', type=str)
     parser.add_argument('-c','--colors', type=str, nargs=n_chan, default=['IR','G'])
     parser.add_argument('--scat_files', '-f', type=str, nargs=n_chan, default=None)
+    parser.add_argument('--test_scat_files', type=str, nargs=n_chan, default=None)
+    parser.add_argument('--noise_amp', type=float, default=1)
     parser.add_argument('--TXfiles', '-T', type=str, nargs=n_chan, default=None)
     args=parser.parse_args()
-    Dstats=errors_for_one_scat_file(args.scat_files, args.TXfiles, args.colors,  args.output_file)
+    
+    if args.test_scat_files is None:
+        args.test_scat_files=args.scat_files
+
+    Dstats=errors_for_one_scat_file(args.test_scat_files, args.scat_files, args.TXfiles, args.colors,  out_file=args.output_file)
 
 # Example command lines:
 #2 2color_test.h5  -f SRF_IR_full.h5 SRF_green_full.h5  -T TX_IR.h5 TX_green.h5
