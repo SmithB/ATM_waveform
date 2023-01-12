@@ -206,7 +206,7 @@ def broadened_misfit(delta_ts, sigma, WF, catalog, M, key_top,  t_tol=None, refi
                     catalog[this_key]=waveform(parent_WF.t, broaden_p(parent_WF, sigma))
                     #catalog[this_key]=waveform(catalog[key_top].t, np.convolve(catalog[key_top].p.ravel(), K,'same'))
                 except ValueError:
-                    print("Convolution failed")
+                    print(f"Convolution failed. sigma={sigma}")
             #parent_WF.params['children'].add(sigma)
             #catalog[this_key].params['children']=set()
         #### HERE MADE A CHANGE ###
