@@ -16,5 +16,5 @@ from .calc_R_and_tshift import calc_R_and_tshift
 from .golden_section_search import golden_section_search
 from .make_rx_scat_catalog import *
 from .fit_2color_waveforms import fit_catalogs
-
+from .fit_ATM_scat_2color import fit_ATM_scat_2color 
 from ATM_waveform import fit
