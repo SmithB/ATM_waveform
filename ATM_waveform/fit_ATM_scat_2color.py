@@ -24,7 +24,7 @@ from ATM_waveform.waveform import waveform
 from time import time
 import argparse
 import h5py
-
+from collections import namedtuple
 import sys
 
 np.seterr(invalid='ignore')
@@ -48,8 +48,19 @@ def choose_shots(input_files, skip=None):
         times_both=times_both[::skip]
     return {key:np.flatnonzero(np.in1d(times[key], times_both)) for key in times.keys()}
 
-def main(args):
-    # main method : open the input files, create output files, process waveforms
+def fit_ATM_scat_2color(args):
+    ''' main method : open the input files, create output files, process waveforms
+
+    inputs:
+         args (structure or dict): structure containing arguments
+    outputs:
+         None (writes to file)
+    '''
+    #N.B.  This has not been tested.
+    if isinstance(args, dict):
+        tempclass=namedtuple("arg_holder", list(args.keys()))
+        args=tempclass(**args)
+    
 
     input_files={}
     for ii, ch in enumerate(args.ch_names):
@@ -258,4 +269,4 @@ if __name__=="__main__":
     parser.add_argument('--sigma_max', type=float, default=5, help='maximum value of sigma to consider, defautls to 5')
     parser.add_argument('--root', type=str, default='')
     args=parser.parse_args()
-    main(args)
+    fit_ATM_scat_2color(args)
