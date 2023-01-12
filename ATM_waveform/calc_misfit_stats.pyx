@@ -20,7 +20,7 @@ cimport cython
 def calc_misfit_stats(int ix_start, int iy_start, int N,  \
             double[:] x, double[:] y, \
             double[:] x2, double[:] y2, \
-            int[:] mask_x, int[:] mask_y):
+            int[:] mask_x, int[:] mask_y, int DEBUG):
     cdef int ii
     cdef int ix
     cdef int iy
@@ -64,4 +64,7 @@ def calc_misfit_stats(int ix_start, int iy_start, int N,  \
     if R2 < 0:
         R2 = 0.
     #return sqrt(R2/(count-1)), di_f, A, count
-    return R2, di_f, A, count
+    if DEBUG == 0:
+        return R2, di_f, A, count
+    else:
+        return R2, di_f, A, count, xx, xy0, xy1, y0y0, y0y1, y1y1
