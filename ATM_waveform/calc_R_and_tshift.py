@@ -45,6 +45,10 @@ def find_matching_indices(tx, ty):
         ixN = Nx - int(np.ceil(di1f))
 
     N = ixN-ix0
+    if ix0+N > Nx-1:
+        N -=1
+    if iy0+N > Ny-1:
+        N -= 1
     di_f = di0f-np.floor(di0f)
 
     return ix0, iy0, N, di_f
@@ -84,13 +88,19 @@ def calc_R_and_tshift(t_shift, WFd, WFm, fit_history=None, return_R_only=False):
     dt = WFd.t[1] - WFd.t[0]
 
     id_start, im_start, N, di0_f = find_matching_indices(WFd.t.ravel(), WFm.t.ravel()+t_shift)
-
+    DEBUG=False
     # call the cython routines that calculate the dot products
-    R2, di_f, A, count = calc_misfit_stats(id_start, im_start, N,  \
-            WFd.p.ravel(), WFm.p.ravel(), \
-            WFd.p_squared.ravel(), WFm.p_squared.ravel(), \
-            WFd.mask.ravel(), WFm.mask.ravel())
-
+    if not DEBUG:
+        R2, di_f, A, count = calc_misfit_stats(id_start, im_start, N,  \
+                WFd.p.ravel(), WFm.p.ravel(), \
+                WFd.p_squared.ravel(), WFm.p_squared.ravel(), \
+                WFd.mask.ravel(), WFm.mask.ravel(), False)
+    else:
+        R2, di_f, A, count, xx, xy0, xy1, y0y0, y0y1, y1y1 = \
+            calc_misfit_stats(id_start, im_start, N,  \
+                    WFd.p.ravel(), WFm.p.ravel(), \
+                    WFd.p_squared.ravel(), WFm.p_squared.ravel(), \
+                    WFd.mask.ravel(), WFm.mask.ravel(), True)
     t_shift_refined = (WFd.t[id_start]-di_f*dt)-WFm.t[im_start]
     R=np.sqrt(R2/(count-1))
 
