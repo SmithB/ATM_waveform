@@ -32,7 +32,7 @@ The main workflow envisaged for this code is to match ATM waveform data with pre
 To perform one of these fits, you will need:
 * A file of ATM waveform data (see above for links)
 * An impulse-response function estimate matching the scanner and the measurement campaign for the data file (see the _data_ subdirectory)
-* A scattering response function file (typically the data/srf_green_full.h5) containing the expected scattering response from a flat snow surface with a density of 400 $kg m^{-2}$.
+* A scattering response function file (typically the data/srf_green_full.h5) containing the expected scattering response from a flat snow surface with a density of 400 $kg\ m^{-3}$.
 
 To generate a fit for a green-wavelength ATM file (in this example, GL_19_W/2019.04.05/ILATMW1B_20190405_175200.atm6AT6.h5), run:
 
