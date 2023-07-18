@@ -142,7 +142,8 @@ def fit_ATM_scat_2color(args):
     sigmas=np.arange(0, 5, 0.25)
     # choose a set of delta t values
     delta_ts=np.arange(-1., 1.5, 0.5)
-
+    if args.output_file is None:
+        out_list=[]
     D={}
     for shot0 in start_vals:
         outShot0=shot0-args.startShot
@@ -178,6 +179,7 @@ def fit_ATM_scat_2color(args):
                                         t_tol=0.25, sigma_tol=0.25,  \
                                         return_catalogs=False,  catalogs=TX_catalog_buffers, params=outDS)
             N_out=len(D_out_TX[ch]['A'])
+            #print([[outShot0,outShot0+N_out], out_h5['/TX/%s/%s' % (ch, field)].shape])
             for field in ['t0','A','R','shot']:
                 out_h5['/TX/%s/%s' % (ch, field)][outShot0:outShot0+N_out]=D_out_TX[ch][field].ravel()
             out_h5['/TX/%s/%s' % (ch, 'sigma')][outShot0:outShot0+N_out]=D_out_TX['both']['sigma'].ravel()
@@ -208,7 +210,12 @@ def fit_ATM_scat_2color(args):
                                             return_catalogs=True,  catalogs=catalog_buffers, params=outDS)
 
         delta_time=time()-tic
-
+        
+        # if output_file is not defined, skip all the output writing
+        if args.output_file is None:
+            out_list += [(D_out.copy(), wf_data.copy())]
+            continue
+        
         # write out the fit information
         N_out=D_out['both']['R'].size
         for ch in channels:
