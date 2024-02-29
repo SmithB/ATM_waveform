@@ -18,7 +18,8 @@ class data(pc.data):
     def __default_field_dict__(self):
         return {
                 'G':['A', 'Amax', 'B', 'R','delta_t', 'nPeaks', 'noise_RMS',\
-                     'shot','t0','tc','seconds_of_day'],
+
+                     'shot','t0','tc', 'seconds_of_day'],
                 'both':['K0','R','sigma'],
                 'location':['elevation', 'latitude', 'longitude']}
     def from_h5(self, filename, **kwargs):

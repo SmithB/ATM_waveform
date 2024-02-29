@@ -1,0 +1,13 @@
+name,Dimensions,Coordinate,description,units,source_field,group,precision
+shot_count,Yes,Yes,"Shot count from the start of the input ATM waveform file, starting from zero",counts,,,
+time,shot_count,No,Time since the start of the calendar day for each shot.  The origin for this coordinate is defined in the “units” attribute of the variable.,Seconds,seconds_of_day,,6
+r_eff,shot_count,No,Effective grain radius for the best-fitting model waveform,Meters,K0,,
+A,shot_count,No,Scaling applied to the model waveform to match the measured waveform,unitless,,,4
+sigma,shot_count,No,Gaussian broadening applied to the model waveform to match the measured waveform,nanoseconds,,,4
+delta_t,shot_count,No,Time shift required to align the best-fit model waveform with the measured waveform,nanoseconds,,,7
+t_origin,shot_count,No,Time of the first sample in the measured waveform relative to the transmit time of the shot,nanoseconds,t0,,7
+noise_RMS,shot_count,No,Estimated noise in the waveform as measured before the start of the signal,counts,,,4
+RMS_misfit,shot_count,No,Root-mean-squared misfit between the measured waveform and the best-fitting model,counts,R,,4
+elevation,shot_count,No,"WGS84 footprint elevation, calculated in ATM processing.  No correction for scattering is applied.",meters,,,4
+latitude,shot_count,No,"Geodetic latitude of the footprint, calculated in ATM processing",degrees_north,,,9
+longitude,shot_count,No,"Geodetic longitude of the footprint, calculated by ATM processing",degrees_east,,,9
