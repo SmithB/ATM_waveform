@@ -54,7 +54,7 @@ def get_tx_est(filename, nShots=np.Inf, TX0=None, source='TX', pMin=50, skip_n_t
     txData = TX[valid]
     txData.t=txData.t-txData.t.mean()
     thresholdMask = txData.p >= 255
-    txData.subBG()
+    txData.subBG(bg_samps=np.arange(0,15, dtype=int))
     txData.tc=np.array([txData[ii].nSigmaMean()[0] for ii in range(txData.size)])
     txData.p[thresholdMask]=np.NaN
     txData.nPeaks=np.ones(txData.size)
@@ -74,7 +74,8 @@ def get_tx_est(filename, nShots=np.Inf, TX0=None, source='TX', pMin=50, skip_n_t
     error_tol=sps.scoreatpercentile(RR, 68)
     all_shifted_TX=list()
     for ii in range(len(txP['R'])):
-        temp=np.interp(TX0.t.ravel(), txData.t.ravel() - txP['delta_t'][ii], txData[ii].p.ravel())
+        temp=np.interp(TX0.t.ravel(), txData.t.ravel() - txP['delta_t'][ii], txData[ii].p.ravel(),
+                      left=np.NaN, right=np.NaN)
         if RR[ii] < error_tol and txP['A'][ii] < 250 and txP['sigma'][ii] <= sigmas[2]:
             if np.isfinite( txP['B'][ii]):
                 temp = (temp - txP['B'][ii]) / txP['A'][ii]
@@ -96,7 +97,11 @@ def main():
     parser.add_argument('input_file', type=str)
     parser.add_argument('output_file', type=str)
     parser.add_argument('--N_shots', '-N', type=int, default=1000)
+    parser.add_argument('--All_shots','-A', action='store_true')
     args=parser.parse_args()
+    
+    if args.All_shots:
+        args.N_shots=np.Inf
     TX, TXp = get_tx_est(args.input_file, source='RX', nShots=args.N_shots)
 
     with h5py.File(args.output_file,'w') as h5f:

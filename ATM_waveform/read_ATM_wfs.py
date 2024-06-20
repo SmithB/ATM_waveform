@@ -48,8 +48,8 @@ def read_ATM_file(fname, getCountAndReturn=False, shot0=0, nShots=np.Inf, readTX
             return shotMax
 
         nShots=np.minimum(shotMax-shot0, nShots)
-        shotN=np.int(shot0+nShots)
-        shot0=np.int(shot0)
+        shotN = int(shot0+nShots)
+        shot0 = int(shot0)
         # read in some of the data fields
         D_in=dict()
 
@@ -62,14 +62,14 @@ def read_ATM_file(fname, getCountAndReturn=False, shot0=0, nShots=np.Inf, readTX
             D_in[key]=np.array(h5f[key][shot0:shotN], dtype=int)
 
         #read in the geolocation and time
-        try:
-            for key in ('/footprint/latitude','/footprint/longitude','/footprint/elevation','/laser/scan_azimuth', '/laser/calrng'):
+        for key in ('/footprint/latitude','/footprint/longitude','/footprint/elevation','/laser/scan_azimuth', '/laser/calrng'):
+            try:
                 D_in[key]=np.array(h5f[key][shot0:shotN])
-        except KeyError:
-            print("failed to read " + key)
-            pass
+            except KeyError:
+                print("failed to read " + key)
+                pass
         D_in['/waveforms/twv/shot/seconds_of_day']=np.array(h5f['/waveforms/twv/shot/seconds_of_day'][shot0:shotN])
-        # read the sampling interval
+        # read the sampling interval, in ns
         dt=np.float64(h5f['/waveforms/twv/ancillary_data/sample_interval'])
 
         # figure out what samples to read from the 'amplitude' dataset
@@ -108,7 +108,11 @@ def read_ATM_file(fname, getCountAndReturn=False, shot0=0, nShots=np.Inf, readTX
                 nPeaks.append(wfd['rx']['count'])
                 rx_samp0.append(wfd['rx']['pos'])
         shots=np.arange(shot0, shotN, dtype=int)
-        result={ 'az':D_in['/laser/scan_azimuth'],'dt':dt}
+        result={'dt':dt}
+        try:
+            result['az']=D_in['/laser/scan_azimuth']
+        except KeyError:
+            pass
         for field in ['elevation','latitude','longitude']:
             try:
                 result[field]=D_in['/footprint/'+field]

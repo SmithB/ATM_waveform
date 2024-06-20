@@ -79,11 +79,16 @@ class waveform(object):
         for field in ['t0','tc','nPeaks', 'shots','noise_RMS','seconds_of_day','FWHM','error_flag']:
             temp=getattr(self, field)
             if temp is not None:
-                if isinstance(key, np.ndarray):
-                    setattr(result, field, temp[key])
-                else:
-                    setattr(result, field, temp[[key]])
+                try:
+                    if isinstance(key, np.ndarray):
+                        setattr(result, field, temp[key])
+                    else:
+                        setattr(result, field, temp[[key]])
+                except Exception as e:
+                    pass
+                    #print('\t failed to read field '+field)
         return result
+    
 
     def centroid(self, els=None, threshold=None):
         """

@@ -15,6 +15,7 @@ os.environ["MKL_NUM_THREADS"]="1"  # multiple threads don't help that much
 import numpy as np
 #import matplotlib.pyplot as plt
 from ATM_waveform.read_ATM_wfs import read_ATM_file
+from ATM_waveform.read_nonstandard_WFs import read_nonstandard_file
 from ATM_waveform.fit_waveforms import listDict
 #from fit_waveforms import waveform
 from ATM_waveform.make_rx_scat_catalog import make_rx_scat_catalog
@@ -30,15 +31,20 @@ import sys
 np.seterr(invalid='ignore')
 
 
-def choose_shots(input_files, skip=None):
+def choose_shots(input_files, skip=None, nonstandard_format=False):
     # get the overlapping shots from the input files
     #
     # matches the shots from input files by their "seconds_of_day_field,' using a default
     # resolution of 5e-5 s
+    time_field="/waveforms/twv/shot/seconds_of_day"
+    if nonstandard_format:
+        time_field="Waveforms/twv/shot_seconds_of_day"
+
     times={}
     for key in input_files.keys():
         with h5py.File(input_files[key],'r') as h5f:
-            times[key]=5.e-5*np.round(np.array(h5f['/waveforms/twv/shot/seconds_of_day'])/5.e-5)
+            print(time_field)
+            times[key]=5.e-5*np.round(np.array(h5f[time_field])/5.e-5)
     if len(input_files) > 1:
         times_both=np.intersect1d(*[times[key] for key in times.keys()])
     else:
@@ -60,7 +66,7 @@ def fit_ATM_scat_2color(args):
     if isinstance(args, dict):
         tempclass=namedtuple("arg_holder", list(args.keys()))
         args=tempclass(**args)
-    
+
 
     input_files={}
     for ii, ch in enumerate(args.ch_names):
@@ -69,7 +75,7 @@ def fit_ATM_scat_2color(args):
     channels = list(input_files.keys())
 
     # get the waveform count from the output file
-    shots= choose_shots(input_files, args.reduce_by)
+    shots= choose_shots(input_files, args.reduce_by, nonstandard_format=args.nonstandard_waveform)
     nWFs=np.minimum(args.nShots, shots[channels[0]].size)
     lastShot=np.minimum(args.startShot+args.nShots, len(shots[channels[0]]))
     nWFs = lastShot-args.startShot+1
@@ -102,6 +108,10 @@ def fit_ATM_scat_2color(args):
             out_h5.create_dataset('RX/%s/p' % ch, (192, nWFs))
             out_h5.create_dataset('RX/%s/p_fit' % ch, (192, nWFs))
             out_h5.create_dataset('RX/%s/t_shift' % ch, (nWFs,))
+            out_h5.create_dataset('TX/%s/p_fiber' % ch, (192, nWFs))
+            out_h5.create_dataset('TX/%s/p_fiber_fit' % ch, (192, nWFs))
+            out_h5.create_dataset('TX/%s/t_fiber_shift' % ch, (nWFs,))
+
     TX={}
     # get the transmit pulse
     for ind, ch in enumerate(channels):
@@ -144,6 +154,11 @@ def fit_ATM_scat_2color(args):
     delta_ts=np.arange(-1., 1.5, 0.5)
     if args.output_file is None:
         out_list=[]
+
+    subBG_dt=3
+    if args.nonstandard_waveform:
+        subBG_dt=6
+
     D={}
     for shot0 in start_vals:
         outShot0=shot0-args.startShot
@@ -157,7 +172,10 @@ def fit_ATM_scat_2color(args):
             # make the return waveform structure
             try:
                 print([ch_shots[0], ch_shots[-1]-ch_shots[0]+1])
-                D=read_ATM_file(input_files[ch], shot0=ch_shots[0], nShots=ch_shots[-1]-ch_shots[0]+1)
+                if args.nonstandard_waveform:
+                    D=read_nonstandard_file(input_files[ch], shot0=ch_shots[0], nShots=ch_shots[-1]-ch_shots[0]+1)
+                else:
+                    D=read_ATM_file(input_files[ch], shot0=ch_shots[0], nShots=ch_shots[-1]-ch_shots[0]+1)
             except Exception as e:
                 print(f"caught exception for channel {ch} for shots {ch_shots[0]} to {ch_shots[-1]}:")
                 print(e)
@@ -169,7 +187,7 @@ def fit_ATM_scat_2color(args):
             D['TX'].t0 += t_wf_ctr
             D['TX'].t -= t_wf_ctr
             # subtract the background noise
-            D['TX'].subBG(t50_minus=3)
+            D['TX'].subBG(t50_minus=subBG_dt)
             # calculate tc (centroid time relative to t0)
             D['TX'].tc = D['TX'].threshold_centroid(fraction=0.38)
             #D_out_TX, catalog_buffers= fit_catalogs({ch:D['TX']}, TX_library, sigmas, delta_ts, \
@@ -177,13 +195,20 @@ def fit_ATM_scat_2color(args):
             #                            return_catalogs=True,  catalogs=catalog_buffers)
             D_out_TX = fit_catalogs({ch:D['TX']}, TX_library, sigmas, delta_ts, \
                                         t_tol=0.25, sigma_tol=0.25,  \
-                                        return_catalogs=False,  catalogs=TX_catalog_buffers, params=outDS)
+                                        return_catalogs=False,  return_data_est=args.waveforms,\
+                                        catalogs=TX_catalog_buffers, params=outDS)
             N_out=len(D_out_TX[ch]['A'])
             #print([[outShot0,outShot0+N_out], out_h5['/TX/%s/%s' % (ch, field)].shape])
             for field in ['t0','A','R','shot']:
                 out_h5['/TX/%s/%s' % (ch, field)][outShot0:outShot0+N_out]=D_out_TX[ch][field].ravel()
             out_h5['/TX/%s/%s' % (ch, 'sigma')][outShot0:outShot0+N_out]=D_out_TX['both']['sigma'].ravel()
+            if args.waveforms:
+                for ch in channels:
+                    out_h5['TX/'+ch+'/p_fiber_fit'][:, outShot0:outShot0+N_out] = np.squeeze(D_out_TX[ch]['wf_est']).T
+                    out_h5['TX/'+ch+'/p_fiber'][:, outShot0:outShot0+N_out] = np.squeeze(D_out_TX[ch]['wf']).T
+                    out_h5['TX/'+ch+'/t_fiber_shift'][outShot0:outShot0+N_out] = D_out_TX[ch]['t_shift'].ravel()
 
+            # fit the returns:
             wf_data[ch]=D['RX']
             wf_data[ch]=wf_data[ch][np.in1d(wf_data[ch].shots, ch_shots)]
             # identify the samples that have clipped amplitudes:
@@ -191,7 +216,7 @@ def fit_ATM_scat_2color(args):
             t_wf_ctr = np.nanmean(wf_data[ch].t)
             wf_data[ch].t -= t_wf_ctr
             wf_data[ch].t0 += t_wf_ctr
-            wf_data[ch].subBG(t50_minus=3)
+            wf_data[ch].subBG(t50_minus=subBG_dt)
 
             if 'latitude' in D:
                 # only one channel has geolocation information. Copy it, will use the 'shot' field to match it to the output data
@@ -210,12 +235,12 @@ def fit_ATM_scat_2color(args):
                                             return_catalogs=True,  catalogs=catalog_buffers, params=outDS)
 
         delta_time=time()-tic
-        
+
         # if output_file is not defined, skip all the output writing
         if args.output_file is None:
             out_list += [(D_out.copy(), wf_data.copy())]
             continue
-        
+
         # write out the fit information
         N_out=D_out['both']['R'].size
         for ch in channels:
@@ -274,6 +299,7 @@ if __name__=="__main__":
     parser.add_argument('--ch_names','-c', type=str, nargs=n_chan, default=['IR','G'])
     parser.add_argument('--sigma_tol', type=float, default=0.25, help='tolerance for waveform gaussian spreading')
     parser.add_argument('--sigma_max', type=float, default=5, help='maximum value of sigma to consider, defautls to 5')
+    parser.add_argument('--nonstandard_waveform', action='store_true', help='use the nonstandard waveform reader')
     parser.add_argument('--root', type=str, default='')
     args=parser.parse_args()
     fit_ATM_scat_2color(args)

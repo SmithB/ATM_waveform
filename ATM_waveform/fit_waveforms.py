@@ -42,7 +42,7 @@ class listDict(dict):
 
 def integer_shift(p, delta, fill_value=np.NaN):
     result = np.empty_like(p)
-    delta=np.int(delta)
+    delta = int(delta)
     if delta > 0:
         result[:delta] = fill_value
         result[delta:] = p[:-delta]
